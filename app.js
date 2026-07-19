@@ -119,7 +119,10 @@
     grid.innerHTML = "";
     config.shortcuts.forEach(function (s, i) {
       var accent = ACCENTS.indexOf(s.accent) >= 0 ? s.accent : "blue";
-      var tile = el("button", { "class": "tile acc-" + accent, "type": "button" });
+      var attrs = { "class": "tile acc-" + accent };
+      if (s.url) { attrs.href = s.url; attrs.target = "_blank"; attrs.rel = "noopener"; }
+      else { attrs.href = "#"; }
+      var tile = el("a", attrs);
       var castBadge = s.cast
         ? '<span class="tile-cast">' + ICONS.cast + " Casten naar TV</span>"
         : "";
@@ -133,7 +136,9 @@
           (s.sub ? '<div class="tile-sub">' + escapeHtml(s.sub) + "</div>" : "") +
           castBadge +
         "</div>";
-      tile.addEventListener("click", function () { openUrl(s.url); });
+      if (!s.url) {
+        tile.addEventListener("click", function (e) { e.preventDefault(); toast("Geen URL ingesteld — open Instellingen"); });
+      }
       grid.appendChild(tile);
     });
   }
@@ -146,6 +151,16 @@
       opt.textContent = lt.label + (lt.url ? "" : "  —  (geen directe link)");
       sel.appendChild(opt);
     });
+    updateRosterLink();
+  }
+
+  function updateRosterLink() {
+    var link = $("#btnOpenRoster");
+    if (!link) return;
+    var idx = parseInt($("#lessonSelect").value, 10) || 0;
+    var lt = config.lessonTypes[idx];
+    var url = (lt && lt.url) ? lt.url : rosterFallbackUrl();
+    link.setAttribute("href", url || "#");
   }
 
   function escapeHtml(str) {
@@ -394,10 +409,12 @@
     $("#btnCastHelp").addEventListener("click", function () { buildCastHelp(); show("#castModal"); });
     $("#hintCast").addEventListener("click", function () { buildCastHelp(); show("#castModal"); });
 
-    $("#btnOpenRoster").addEventListener("click", function () {
+    $("#lessonSelect").addEventListener("change", updateRosterLink);
+    $("#btnOpenRoster").addEventListener("click", function (e) {
       var idx = parseInt($("#lessonSelect").value, 10) || 0;
       var lt = config.lessonTypes[idx];
-      openUrl(lt && lt.url ? lt.url : rosterFallbackUrl());
+      var url = lt && lt.url ? lt.url : rosterFallbackUrl();
+      if (!url) { e.preventDefault(); toast("Geen URL ingesteld — open Instellingen"); }
     });
 
     $("#btnSave").addEventListener("click", saveSettings);

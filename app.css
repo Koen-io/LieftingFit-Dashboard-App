@@ -101,6 +101,7 @@ body {
   color: var(--text);
   cursor: pointer;
   text-align: left;
+  text-decoration: none;
   overflow: hidden;
   transition: transform .12s ease, border-color .15s, box-shadow .2s;
   -webkit-tap-highlight-color: transparent;
