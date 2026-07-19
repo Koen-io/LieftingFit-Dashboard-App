@@ -15,8 +15,12 @@
     cart:     '<svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>',
     dumbbell: '<svg viewBox="0 0 24 24"><path d="M6 6v12M3 8v8M18 6v12M21 8v8M6 12h12"/></svg>',
     link:     '<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>',
-    cast:     '<svg viewBox="0 0 24 24"><path d="M2 20h.01M2 16a6 6 0 0 1 6 6M2 12a10 10 0 0 1 10 10M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-6"/></svg>'
+    cast:     '<svg viewBox="0 0 24 24"><path d="M2 20h.01M2 16a6 6 0 0 1 6 6M2 12a10 10 0 0 1 10 10M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-6"/></svg>',
+    bolt:     '<svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>'
   };
+
+  // Running as the LieftingFit Chrome extension? (enables Type B one-click deep links)
+  var IS_EXT = typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id;
   var ACCENTS = ["blue", "green", "amber", "purple", "cyan", "red"];
 
   // ----- Default configuration -----
@@ -96,6 +100,20 @@
     if (!url) { toast("Geen URL ingesteld — open Instellingen"); return; }
     window.open(url, "_blank", "noopener");
   }
+  function runMacro(s) {
+    var startUrl = (s.macro && s.macro.startUrl) || s.url;
+    toast("Bezig: " + s.label + " openen…");
+    chrome.runtime.sendMessage(
+      { action: "runMacro", startUrl: startUrl, steps: s.macro.steps },
+      function (res) {
+        if (chrome.runtime.lastError) { toast("Kon de helper niet starten"); return; }
+        if (!res) { toast("Geen antwoord van de helper"); return; }
+        if (res.ok) toast("✓ " + s.label + " geopend");
+        else toast("Stap " + (res.failedStep || "?") + " mislukt" + (res.label ? " (" + res.label + ")" : "") + " — neem de flow opnieuw op");
+      }
+    );
+  }
+
   var toastTimer;
   function toast(msg) {
     var t = $("#toast");
@@ -119,13 +137,15 @@
     grid.innerHTML = "";
     config.shortcuts.forEach(function (s, i) {
       var accent = ACCENTS.indexOf(s.accent) >= 0 ? s.accent : "blue";
+      var hasMacro = !!(s.macro && Array.isArray(s.macro.steps) && s.macro.steps.length);
+      var fallbackUrl = hasMacro ? (s.macro.startUrl || s.url) : s.url;
       var attrs = { "class": "tile acc-" + accent };
-      if (s.url) { attrs.href = s.url; attrs.target = "_blank"; attrs.rel = "noopener"; }
+      if (fallbackUrl) { attrs.href = fallbackUrl; attrs.target = "_blank"; attrs.rel = "noopener"; }
       else { attrs.href = "#"; }
       var tile = el("a", attrs);
-      var castBadge = s.cast
-        ? '<span class="tile-cast">' + ICONS.cast + " Casten naar TV</span>"
-        : "";
+      var badge = "";
+      if (hasMacro) badge = '<span class="tile-cast tile-macro">' + ICONS.bolt + " 1-klik dieplink</span>";
+      else if (s.cast) badge = '<span class="tile-cast">' + ICONS.cast + " Casten naar TV</span>";
       tile.innerHTML =
         '<div class="tile-top">' +
           '<span class="tile-icon">' + (ICONS[s.icon] || ICONS.link) + "</span>" +
@@ -134,11 +154,13 @@
         '<div class="tile-body">' +
           '<div class="tile-label">' + escapeHtml(s.label) + "</div>" +
           (s.sub ? '<div class="tile-sub">' + escapeHtml(s.sub) + "</div>" : "") +
-          castBadge +
+          badge +
         "</div>";
-      if (!s.url) {
-        tile.addEventListener("click", function (e) { e.preventDefault(); toast("Geen URL ingesteld — open Instellingen"); });
-      }
+      tile.addEventListener("click", function (e) {
+        if (hasMacro && IS_EXT) { e.preventDefault(); runMacro(s); return; }
+        if (hasMacro && !IS_EXT) { toast("Installeer de Chrome-extensie voor de 1-klik dieplink — nu open ik de startpagina"); return; }
+        if (!fallbackUrl) { e.preventDefault(); toast("Geen URL ingesteld — open Instellingen"); }
+      });
       grid.appendChild(tile);
     });
   }
@@ -279,7 +301,62 @@
     lbl.appendChild(document.createTextNode("Toon 'Casten naar TV' badge"));
     castF.appendChild(lbl);
     card.appendChild(castF);
+
+    // Type B macro (recorded click-sequence deep link)
+    card.appendChild(macroField(s));
     return card;
+  }
+
+  function macroField(s) {
+    var wrap = el("div", { "class": "macro-field" });
+    var has = !!(s.macro && Array.isArray(s.macro.steps) && s.macro.steps.length);
+    var status = el("div", { "class": "macro-status" });
+    status.innerHTML = has
+      ? '<span class="macro-on">' + ICONS.bolt + " 1-klik dieplink actief · " + s.macro.steps.length + " stappen</span>"
+      : '<span class="macro-off">Type B dieplink: nog geen opname</span>';
+    wrap.appendChild(status);
+
+    var row = el("div", { "class": "macro-row" });
+    var pick = el("button", { "class": "mini-btn", "type": "button" }, has ? "Vervang opname" : "Importeer Chrome-opname");
+    var file = el("input", { type: "file", accept: "application/json", hidden: "hidden" });
+    pick.addEventListener("click", function () { file.click(); });
+    file.addEventListener("change", function (e) {
+      if (e.target.files && e.target.files[0]) importRecordingForShortcut(s, e.target.files[0]);
+      e.target.value = "";
+    });
+    row.appendChild(pick);
+    row.appendChild(file);
+
+    if (has) {
+      var clr = el("button", { "class": "mini-btn", "type": "button" }, "Wis opname");
+      clr.addEventListener("click", function () { delete s.macro; buildSettingsForm(); });
+      row.appendChild(clr);
+    }
+    wrap.appendChild(row);
+    wrap.appendChild(el("p", { "class": "help-text" },
+      "Neem de flow op met Chrome ⋮ → Meer hulpprogramma's → Recorder, exporteer als JSON en importeer hier. Bij één klik doorloopt de helper dan alle stappen tot het eindscherm."));
+    return wrap;
+  }
+
+  function importRecordingForShortcut(s, fileObj) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var rec = JSON.parse(reader.result);
+        var steps = Array.isArray(rec.steps) ? rec.steps : (Array.isArray(rec) ? rec : null);
+        if (!steps || !steps.length) { toast("Geen stappen gevonden in dit bestand"); return; }
+        var startUrl = "";
+        for (var i = 0; i < steps.length; i++) {
+          if (steps[i].type === "navigate" && steps[i].url) { startUrl = steps[i].url; break; }
+        }
+        s.macro = { startUrl: startUrl || s.url, steps: steps };
+        buildSettingsForm();
+        toast("Opname geïmporteerd · " + steps.length + " stappen");
+      } catch (e) {
+        toast("Ongeldig opnamebestand (verwacht Chrome Recorder JSON)");
+      }
+    };
+    reader.readAsText(fileObj);
   }
 
   function lessonCard(t, i) {

@@ -96,6 +96,43 @@ up perfectly in a minute — no password sharing needed:
    always open *today's* class board, I need to know how a class block maps to
    its coachboard ID — share a couple of examples and I'll make it dynamic.
 
+## One-click deep links (the Chrome Helper / extension)
+
+Some destinations can't be reached by a plain link — e.g. Dexos **Event
+Wijzigen** opens a pop-up that doesn't change the web address ("Type B"). For
+those, install this project as a **Chrome extension**: clicking a tile then
+**replays your recorded clicks automatically** and lands on the final screen.
+
+Because the extension runs inside your own Chrome, it reuses your existing
+**Sportbit login** — no password is ever stored in the app.
+
+### Install the extension (one time, per laptop)
+
+1. Download this repo folder to the laptop.
+2. Open Chrome → `chrome://extensions`.
+3. Turn on **Developer mode** (top-right).
+4. Click **Load unpacked** and select this project folder.
+5. The LieftingFit icon appears in the toolbar — click it to open the dashboard.
+
+### Turn a multi-step flow into a one-click tile
+
+1. In Chrome, go to the page where the flow starts (e.g. `…/dexos/`) while
+   **logged into Sportbit**.
+2. Open **⋮ → More tools → Recorder → Start new recording**, give it a name.
+3. Do your clicks (Planning → Workout Programmering → class block → Acties →
+   Bekijk/Wijzig → Event Wijzigen), then **End recording**.
+4. Click **Export ⭳ → JSON** and save the file.
+5. In the dashboard, open **Settings (⚙️)**, find the tile (e.g. *Training
+   aanpassen*), click **Importeer Chrome-opname**, and pick that JSON.
+6. Save. The tile now shows a **⚡ 1-klik dieplink** badge — clicking it runs the
+   whole sequence for you.
+
+If a step can't be found later (the site changed, or the class block was
+date-specific), the dashboard tells you exactly which step failed — just
+re-record that flow. Class blocks that differ per day may need the recording
+tweaked to match by class name/time instead of an exact cell; send me a failing
+recording and I'll adjust the matching.
+
 ## Ideas / next steps
 
 - **Chrome extension** that collapses the 6-step Dexos navigation
@@ -109,12 +146,21 @@ up perfectly in a minute — no password sharing needed:
 ## Project layout
 
 ```
-index.html            # the dashboard
+index.html            # the dashboard (also the extension's page)
 app.css               # styling (dark, brand-matched)
-app.js                # logic + default configuration
-manifest.webmanifest  # PWA install metadata
+app.js                # logic, default config, macro (Type B) support
+manifest.json         # Chrome extension manifest (MV3)
+background.js         # extension service worker + click-replay engine
+manifest.webmanifest  # PWA install metadata (for the non-extension/hosted use)
+build-standalone.mjs  # inlines everything into one downloadable HTML file
+lieftingfit-dashboard-standalone.html  # generated single-file version
 assets/               # LieftingFit logo (black/white transparent) + app icons
 ```
+
+The same folder works three ways: open `index.html` in Chrome (or the hosted
+link) as a plain dashboard, share `lieftingfit-dashboard-standalone.html` as one
+file, or **Load unpacked** the folder as the Chrome extension to unlock the
+one-click deep links.
 
 Brand assets in `assets/` were generated from the official
 `Beeldmerk_LieftingFit` logo: transparent black (for light backgrounds),

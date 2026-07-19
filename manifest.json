@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "LieftingFit Trainer Dashboard",
+  "version": "1.0.0",
+  "description": "Snelkoppelingen-dashboard met één-klik dieplinks (Type B) voor de trainers van LieftingFit.",
+  "action": { "default_title": "LieftingFit Dashboard openen" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["tabs", "scripting", "storage"],
+  "host_permissions": [
+    "https://lieftingfit.sportbitapp.nl/*",
+    "https://*.sportbitapp.nl/*"
+  ],
+  "icons": {
+    "16": "assets/favicon-64.png",
+    "48": "assets/icon-192.png",
+    "128": "assets/icon-192.png",
+    "512": "assets/icon-512.png"
+  }
+}

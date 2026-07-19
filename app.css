@@ -241,6 +241,16 @@ kbd {
 .add-row:hover { color: var(--text); border-color: var(--blue); }
 .help-text { color: var(--muted-2); font-size: 12.5px; line-height: 1.5; margin: 6px 0 0; }
 
+/* macro (Type B) controls in settings */
+.macro-field { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.macro-status { font-size: 13px; margin-bottom: 8px; }
+.macro-on { display: inline-flex; align-items: center; gap: 6px; color: var(--amber); font-weight: 700; }
+.macro-on svg { width: 15px; height: 15px; fill: currentColor; stroke: none; }
+.macro-off { color: var(--muted-2); }
+.macro-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.tile-macro { color: var(--tile-accent); }
+.tile-macro svg { fill: currentColor; stroke: none; }
+
 /* cast help */
 .cast-steps { margin: 0; padding-left: 0; list-style: none; counter-reset: step; }
 .cast-steps li { position: relative; padding: 0 0 16px 44px; counter-increment: step; color: var(--text); font-size: 15px; line-height: 1.5; }
