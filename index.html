@@ -1,0 +1,100 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>LieftingFit · Trainer Dashboard</title>
+<meta name="theme-color" content="#0b0d10" />
+<link rel="icon" href="assets/favicon-64.png" />
+<link rel="apple-touch-icon" href="assets/icon-192.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="stylesheet" href="app.css" />
+
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo" src="assets/liftingfit-white.png" alt="LieftingFit" />
+      <div class="brand-text">
+        <span class="brand-name" data-bind="gymName">LieftingFit</span>
+        <span class="brand-sub">Trainer Dashboard</span>
+      </div>
+    </div>
+
+    <div class="clock">
+      <div class="clock-time" id="clockTime">--:--</div>
+      <div class="clock-date" id="clockDate">&nbsp;</div>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="icon-btn" id="btnCastHelp" title="Casten naar de TV (?)" aria-label="Cast-hulp">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20h.01M2 16a6 6 0 0 1 6 6M2 12a10 10 0 0 1 10 10M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-6"/></svg>
+      </button>
+      <button class="icon-btn" id="btnFullscreen" title="Volledig scherm (F)" aria-label="Volledig scherm">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 0-2 2h-3"/></svg>
+      </button>
+      <button class="icon-btn" id="btnSettings" title="Instellingen (S)" aria-label="Instellingen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="grid" id="grid"><!-- tiles injected --></main>
+
+  <section class="roster-bar" id="rosterBar">
+    <div class="roster-bar-label">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="rb-icon"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      <span>Rooster · maandoverzicht per lestype</span>
+    </div>
+    <div class="roster-bar-controls">
+      <select id="lessonSelect" class="lesson-select" aria-label="Kies lestype"></select>
+      <button class="btn btn-primary" id="btnOpenRoster">Open rooster</button>
+    </div>
+  </section>
+
+  <footer class="hintbar">
+    <span class="hint"><kbd>1</kbd>–<kbd>9</kbd> open snelkoppeling</span>
+    <span class="hint"><kbd>F</kbd> volledig scherm</span>
+    <span class="hint"><kbd>S</kbd> instellingen</span>
+    <span class="hint hint-cast" id="hintCast">Casten? Klik op <b>?</b> rechtsboven</span>
+  </footer>
+</div>
+
+<!-- Settings modal -->
+<div class="modal-overlay" id="settingsModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-head">
+      <h2 id="settingsTitle">Instellingen</h2>
+      <button class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="modal-body" id="settingsBody"><!-- injected --></div>
+    <div class="modal-foot">
+      <div class="foot-left">
+        <button class="btn btn-ghost" id="btnExport" title="Bewaar deze configuratie als bestand">Exporteer config</button>
+        <button class="btn btn-ghost" id="btnImport" title="Laad configuratie van een ander toestel">Importeer config</button>
+        <button class="btn btn-ghost btn-danger" id="btnReset">Herstel standaard</button>
+        <input type="file" id="importFile" accept="application/json" hidden />
+      </div>
+      <div class="foot-right">
+        <button class="btn btn-ghost" data-close>Annuleren</button>
+        <button class="btn btn-primary" id="btnSave">Opslaan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Cast help modal -->
+<div class="modal-overlay" id="castModal" hidden>
+  <div class="modal modal-narrow" role="dialog" aria-modal="true" aria-labelledby="castTitle">
+    <div class="modal-head">
+      <h2 id="castTitle">Casten naar de TV</h2>
+      <button class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="modal-body" id="castBody"><!-- injected --></div>
+    <div class="modal-foot">
+      <div class="foot-right" style="margin-left:auto">
+        <button class="btn btn-primary" data-close>Begrepen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="app.js"></script>
