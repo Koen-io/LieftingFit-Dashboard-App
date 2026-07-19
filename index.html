@@ -35,18 +35,16 @@
     </div>
   </header>
 
-  <main class="grid" id="grid"><!-- tiles injected --></main>
-
-  <section class="roster-bar" id="rosterBar">
-    <div class="roster-bar-label">
-      <svg viewBox="0 0 24 24" aria-hidden="true" class="rb-icon"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-      <span>Rooster · maandoverzicht per lestype</span>
+  <section class="context-bar" id="contextBar">
+    <div class="context-label">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="rb-icon"><path d="M6 6v12M3 8v8M18 6v12M21 8v8M6 12h12"/></svg>
+      <span>Actief lestype</span>
     </div>
-    <div class="roster-bar-controls">
-      <select id="lessonSelect" class="lesson-select" aria-label="Kies lestype"></select>
-      <a class="btn btn-primary" id="btnOpenRoster" target="_blank" rel="noopener" href="#">Open rooster</a>
-    </div>
+    <select id="typeSelect" class="type-select" aria-label="Kies lestype"></select>
+    <div class="context-hint" id="contextHint">De knoppen hieronder werken op de les van dit type.</div>
   </section>
+
+  <main class="grid" id="grid"><!-- tiles injected --></main>
 
   <footer class="hintbar">
     <span class="hint"><kbd>1</kbd>–<kbd>9</kbd> open snelkoppeling</span>

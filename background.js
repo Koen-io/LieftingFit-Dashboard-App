@@ -32,7 +32,7 @@ async function runMacro(msg) {
   var results = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: replayInPage,
-    args: [steps]
+    args: [steps, msg.context || {}]
   });
   var res = results && results[0] ? results[0].result : null;
   return res || { ok: false, error: "Geen resultaat van de pagina." };
@@ -64,12 +64,25 @@ function waitForTabComplete(tabId, timeoutMs) {
 /* ---- Injected into the Sportbit page: replays the recorded steps ---- */
 /* This function is serialized and runs in the page context. Keep it
    self-contained (no external references). */
-function replayInPage(steps) {
+function replayInPage(steps, context) {
   return new Promise(function (resolve) {
     var STEP_TIMEOUT = 15000;
     var SETTLE = 450;
+    context = context || {};
 
     function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    // Replace {{TYPE}}, {{TODAY_ISO}}, {{TODAY_D}}, {{TIME}}, {{WEEKDAY}} with the
+    // live context so one recording follows the dropdown + current date.
+    function subst(str) {
+      if (typeof str !== "string") return str;
+      return str
+        .replace(/\{\{TYPE\}\}/g, context.type || "")
+        .replace(/\{\{TODAY_ISO\}\}/g, context.todayISO || "")
+        .replace(/\{\{TODAY_D\}\}/g, context.dayOfMonth || "")
+        .replace(/\{\{TIME\}\}/g, context.time || "")
+        .replace(/\{\{WEEKDAY\}\}/g, context.weekday || "");
+    }
 
     function candidatesOf(step) {
       // Chrome Recorder: step.selectors = [[sel, ...], [sel, ...]]  (flatten)
@@ -77,8 +90,8 @@ function replayInPage(steps) {
       var sels = step.selectors || [];
       for (var i = 0; i < sels.length; i++) {
         var group = sels[i];
-        if (Array.isArray(group)) { for (var j = 0; j < group.length; j++) out.push(group[j]); }
-        else if (typeof group === "string") out.push(group);
+        if (Array.isArray(group)) { for (var j = 0; j < group.length; j++) out.push(subst(group[j])); }
+        else if (typeof group === "string") out.push(subst(group));
       }
       return out;
     }
@@ -178,7 +191,7 @@ function replayInPage(steps) {
         } else if (type === "change") {
           var f = await waitFor(cands);
           if (!f) return done({ ok: false, failedStep: i + 1, reason: "kon veld niet vinden", label: firstText(cands) });
-          setValue(f, step.value != null ? step.value : "");
+          setValue(f, step.value != null ? subst(String(step.value)) : "");
           acted++;
           await sleep(200);
         } else if (type === "waitForElement") {

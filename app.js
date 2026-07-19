@@ -24,40 +24,47 @@
   var ACCENTS = ["blue", "green", "amber", "purple", "cyan", "red"];
 
   // ----- Default configuration -----
+  // The active class type drives the context-aware tiles:
+  //   contextMode "today" -> today's class of the selected type
+  //   contextMode "week"  -> that type's whole week
+  //   contextMode "none"  -> ignores the selected type
   var DEFAULT_CONFIG = {
     gymName: "LieftingFit",
     tvName: "", // optional Chromecast / TV name, shown in cast help
+    selectedType: "CrossFit",
+    classTypes: [
+      "60+ training", "Advanced Kickboxing", "Base builder", "Booty", "Booty daluren",
+      "brazilian jiu jitsu", "Calisthenics", "Calisthenics Kids & Teens", "Challenge",
+      "Core", "CoreFit", "CrossFit", "Crossfit Daluren", "CrossFit open", "Events",
+      "FitnessFit", "Hyrox", "Hyrox daluren", "Hyrox strength", "Junior Powerliften",
+      "Kettlebell Training", "Kickboksen", "Kickboksen (daluren)", "KidsFit",
+      "Olympic weightlifting", "Powerliften", "PRVN Burn", "Sparren (kickboksen)",
+      "Specialty class: Pilates", "Strength", "TeenFit Calisthenics", "TeenFit kickboksen",
+      "The Outdoor Project - Castricum", "The Outdoor project - Uitgeest", "The Run Club",
+      "TRX", "Trx / Booty mix", "TRX Daluren", "Trx training", "Yoga",
+      "zaal verhuurd voor event"
+    ],
     shortcuts: [
       {
         id: "coachboard", label: "Coachboard", sub: "Sportbit · Presentatie-modus",
-        icon: "present", accent: "green", cast: true,
+        icon: "present", accent: "green", cast: true, contextMode: "today",
         url: "https://lieftingfit.sportbitapp.nl/cbm/coachboard/110634/"
       },
       {
-        id: "rooster", label: "Rooster", sub: "Sportbit · Lesrooster",
-        icon: "calendar", accent: "blue", cast: false,
-        url: "https://lieftingfit.sportbitapp.nl/web/nl/login"
+        id: "dexos", label: "Training aanpassen", sub: "Dexos · Workout Programmering",
+        icon: "edit", accent: "amber", cast: false, contextMode: "today",
+        url: "https://lieftingfit.sportbitapp.nl/dexos/"
       },
       {
-        id: "dexos", label: "Training aanpassen", sub: "Dexos · Workout Programmering",
-        icon: "edit", accent: "amber", cast: false,
+        id: "rooster", label: "Rooster", sub: "Sportbit · Lesrooster",
+        icon: "calendar", accent: "blue", cast: false, contextMode: "week",
         url: "https://lieftingfit.sportbitapp.nl/web/nl/login"
       },
       {
         id: "kassa", label: "Kassa", sub: "Sportbit · Afrekenen",
-        icon: "cart", accent: "purple", cast: false,
+        icon: "cart", accent: "purple", cast: false, contextMode: "none",
         url: "https://lieftingfit.sportbitapp.nl/cbm/kassa/"
       }
-    ],
-    // Lesson types for the roster month view. Each can have its own deep-link
-    // URL (paste the pre-filtered month-view URL from Sportbit once). Types
-    // without a URL fall back to the generic Rooster shortcut.
-    lessonTypes: [
-      { label: "Alle lessen", url: "" },
-      { label: "CrossFit", url: "" },
-      { label: "HYROX", url: "" },
-      { label: "Weightlifting", url: "" },
-      { label: "Open Gym", url: "" }
     ]
   };
 
@@ -82,7 +89,9 @@
     base.gymName = cfg.gymName || base.gymName;
     base.tvName = typeof cfg.tvName === "string" ? cfg.tvName : base.tvName;
     if (Array.isArray(cfg.shortcuts)) base.shortcuts = cfg.shortcuts;
-    if (Array.isArray(cfg.lessonTypes)) base.lessonTypes = cfg.lessonTypes;
+    if (Array.isArray(cfg.classTypes) && cfg.classTypes.length) base.classTypes = cfg.classTypes;
+    if (typeof cfg.selectedType === "string") base.selectedType = cfg.selectedType;
+    if (base.classTypes.indexOf(base.selectedType) < 0) base.selectedType = base.classTypes[0];
     return base;
   }
 
@@ -100,11 +109,26 @@
     if (!url) { toast("Geen URL ingesteld — open Instellingen"); return; }
     window.open(url, "_blank", "noopener");
   }
+  function buildContext() {
+    var d = new Date();
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    return {
+      type: config.selectedType,
+      contextMode: null, // filled per shortcut below
+      todayISO: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()),
+      dayOfMonth: String(d.getDate()),
+      weekday: d.toLocaleDateString("nl-NL", { weekday: "long" }),
+      time: pad(d.getHours()) + ":" + pad(d.getMinutes())
+    };
+  }
+
   function runMacro(s) {
     var startUrl = (s.macro && s.macro.startUrl) || s.url;
+    var ctx = buildContext();
+    ctx.contextMode = s.contextMode || "none";
     toast("Bezig: " + s.label + " openen…");
     chrome.runtime.sendMessage(
-      { action: "runMacro", startUrl: startUrl, steps: s.macro.steps },
+      { action: "runMacro", startUrl: startUrl, steps: s.macro.steps, context: ctx },
       function (res) {
         if (chrome.runtime.lastError) { toast("Kon de helper niet starten"); return; }
         if (!res) { toast("Geen antwoord van de helper"); return; }
@@ -146,6 +170,9 @@
       var badge = "";
       if (hasMacro) badge = '<span class="tile-cast tile-macro">' + ICONS.bolt + " 1-klik dieplink</span>";
       else if (s.cast) badge = '<span class="tile-cast">' + ICONS.cast + " Casten naar TV</span>";
+      var contextChip = "";
+      if (s.contextMode === "today") contextChip = '<span class="tile-context">Vandaag · ' + escapeHtml(config.selectedType) + "</span>";
+      else if (s.contextMode === "week") contextChip = '<span class="tile-context">Deze week · ' + escapeHtml(config.selectedType) + "</span>";
       tile.innerHTML =
         '<div class="tile-top">' +
           '<span class="tile-icon">' + (ICONS[s.icon] || ICONS.link) + "</span>" +
@@ -154,6 +181,7 @@
         '<div class="tile-body">' +
           '<div class="tile-label">' + escapeHtml(s.label) + "</div>" +
           (s.sub ? '<div class="tile-sub">' + escapeHtml(s.sub) + "</div>" : "") +
+          contextChip +
           badge +
         "</div>";
       tile.addEventListener("click", function (e) {
@@ -165,35 +193,21 @@
     });
   }
 
-  function renderLessonSelect() {
-    var sel = $("#lessonSelect");
+  function renderTypeSelect() {
+    var sel = $("#typeSelect");
+    if (!sel) return;
     sel.innerHTML = "";
-    config.lessonTypes.forEach(function (lt, i) {
-      var opt = el("option", { value: String(i) });
-      opt.textContent = lt.label + (lt.url ? "" : "  —  (geen directe link)");
+    config.classTypes.forEach(function (name) {
+      var opt = el("option", { value: name }, name);
+      if (name === config.selectedType) opt.selected = true;
       sel.appendChild(opt);
     });
-    updateRosterLink();
-  }
-
-  function updateRosterLink() {
-    var link = $("#btnOpenRoster");
-    if (!link) return;
-    var idx = parseInt($("#lessonSelect").value, 10) || 0;
-    var lt = config.lessonTypes[idx];
-    var url = (lt && lt.url) ? lt.url : rosterFallbackUrl();
-    link.setAttribute("href", url || "#");
   }
 
   function escapeHtml(str) {
     return String(str == null ? "" : str)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
-  }
-
-  function rosterFallbackUrl() {
-    var r = config.shortcuts.filter(function (s) { return s.id === "rooster"; })[0];
-    return r ? r.url : "";
   }
 
   // ----- Clock -----
@@ -242,19 +256,16 @@
     sc.appendChild(addSc);
     body.appendChild(sc);
 
-    // Lesson types
-    var lt = el("div", { "class": "set-section" }, "<h3>Lestypes (rooster maandoverzicht)</h3>");
+    // Class types (the dropdown on the main page)
+    var lt = el("div", { "class": "set-section" }, "<h3>Lestypes (dropdown hoofdscherm)</h3>");
     lt.appendChild(el("p", { "class": "help-text" },
-      "Open in Sportbit het rooster in <b>maandweergave</b>, kies een lestype met de selector links van de Exporteer-knop, en plak hier de URL uit de adresbalk. Zo opent elk lestype direct het juiste maandoverzicht."));
-    var ltList = el("div", { id: "ltList" });
-    config.lessonTypes.forEach(function (t, i) { ltList.appendChild(lessonCard(t, i)); });
-    lt.appendChild(ltList);
-    var addLt = el("button", { "class": "add-row", "type": "button" }, "+ Lestype toevoegen");
-    addLt.addEventListener("click", function () {
-      config.lessonTypes.push({ label: "Nieuw lestype", url: "" });
-      buildSettingsForm();
+      "Eén lestype per regel. Dit vult de dropdown op het hoofdscherm; het gekozen type stuurt de context-knoppen aan."));
+    var ta = el("textarea", { "class": "types-textarea", rows: "8", spellcheck: "false" });
+    ta.value = config.classTypes.join("\n");
+    ta.addEventListener("input", function () {
+      config.classTypes = ta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
     });
-    lt.appendChild(addLt);
+    lt.appendChild(ta);
     body.appendChild(lt);
   }
 
@@ -359,21 +370,6 @@
     reader.readAsText(fileObj);
   }
 
-  function lessonCard(t, i) {
-    var card = el("div", { "class": "row-card" });
-    var head = el("div", { "class": "row-head" });
-    head.appendChild(el("strong", null, escapeHtml(t.label || "Lestype")));
-    var del = el("button", { "class": "mini-btn", "type": "button" }, "Verwijder");
-    del.addEventListener("click", function () { config.lessonTypes.splice(i, 1); buildSettingsForm(); });
-    head.appendChild(del);
-    card.appendChild(head);
-    var grid = el("div", { "class": "row-grid" });
-    grid.appendChild(bindField("Naam lestype", t, "label"));
-    grid.appendChild(bindField("Maand-URL (optioneel)", t, "url"));
-    card.appendChild(grid);
-    return card;
-  }
-
   function bindField(label, obj, key) {
     var f = el("div", { "class": "field" });
     f.appendChild(el("label", null, escapeHtml(label)));
@@ -472,8 +468,8 @@
   // ----- Wire up -----
   function renderAll() {
     renderBindings();
+    renderTypeSelect();
     renderTiles();
-    renderLessonSelect();
   }
 
   function init() {
@@ -486,12 +482,10 @@
     $("#btnCastHelp").addEventListener("click", function () { buildCastHelp(); show("#castModal"); });
     $("#hintCast").addEventListener("click", function () { buildCastHelp(); show("#castModal"); });
 
-    $("#lessonSelect").addEventListener("change", updateRosterLink);
-    $("#btnOpenRoster").addEventListener("click", function (e) {
-      var idx = parseInt($("#lessonSelect").value, 10) || 0;
-      var lt = config.lessonTypes[idx];
-      var url = lt && lt.url ? lt.url : rosterFallbackUrl();
-      if (!url) { e.preventDefault(); toast("Geen URL ingesteld — open Instellingen"); }
+    $("#typeSelect").addEventListener("change", function () {
+      config.selectedType = $("#typeSelect").value;
+      saveConfig(config);
+      renderTiles(); // refresh the "Vandaag · <type>" chips
     });
 
     $("#btnSave").addEventListener("click", saveSettings);

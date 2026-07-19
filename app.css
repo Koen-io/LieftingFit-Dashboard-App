@@ -175,6 +175,42 @@ body {
 }
 .lesson-select:focus { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
+/* ---------- Context bar (active class type) ---------- */
+.context-bar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: clamp(14px, 1.6vw, 20px) clamp(18px, 2vw, 26px);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: linear-gradient(160deg, var(--panel), var(--bg-2));
+}
+.context-label { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; font-size: clamp(14px, 1.5vw, 17px); }
+.type-select {
+  appearance: none;
+  min-width: 260px;
+  padding: 13px 44px 13px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2397a1b0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 14px center;
+  color: var(--text);
+  font-size: 16px; font-weight: 700; letter-spacing: 0.01em;
+  cursor: pointer;
+}
+.type-select:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+.context-hint { color: var(--muted); font-size: 13px; margin-left: auto; }
+.tile-context {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--muted); background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border); padding: 5px 11px; border-radius: 999px;
+  width: fit-content;
+}
+.types-textarea {
+  width: 100%; min-height: 160px; resize: vertical;
+  padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-2); color: var(--text); font-family: inherit; font-size: 14px; line-height: 1.6;
+}
+.types-textarea:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: transparent; }
+
 /* ---------- Buttons ---------- */
 .btn {
   font-family: inherit; font-size: 15px; font-weight: 700;
