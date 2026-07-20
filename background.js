@@ -106,6 +106,9 @@ function replayInPage(steps, context) {
     function subst(str) {
       if (typeof str !== "string") return str;
       return str
+        // Falls back to the full type when typeBase is absent, so older saved
+        // configs (which have no typeBase) still substitute to something usable.
+        .replace(/\{\{TYPE_BASE\}\}/g, context.typeBase || context.type || "")
         .replace(/\{\{TYPE\}\}/g, context.type || "")
         .replace(/\{\{TODAY_ISO\}\}/g, context.todayISO || "")
         .replace(/\{\{TODAY_DMY\}\}/g, context.todayDMY || "")
@@ -352,7 +355,13 @@ function replayInPage(steps, context) {
           // wait for the list to render, then pick the nearest upcoming entry
           await waitFor(cands);
           var near = findNearestUpcoming(cands);
-          if (!near) return done({ ok: false, failedStep: i + 1, reason: "geen les van dit type vandaag", label: firstText(cands) });
+          // "soft": nothing is broken — the roster tab is open and already
+          // switched to Alle roosters, so the trainer can pick the class by
+          // hand. Reported as a hint, not a macro failure. Happens when the
+          // class is not on today's schedule, or when the Dexos type name has
+          // no counterpart on the roster (dashboard "Kickboksen" vs roster
+          // "Boksen").
+          if (!near) return done({ ok: false, soft: true, failedStep: i + 1, reason: "geen les van dit type vandaag — kies hem hieronder in het rooster", label: firstText(cands) });
           realClick(near);
           acted++;
           await sleep(SETTLE);

@@ -111,8 +111,16 @@
   let pass = 0, fail = 0;
   const lines = [];
 
-  // Render after every check, not just at the end: a hang in any single case
-  // otherwise leaves the page stuck on "running…" with no clue where it stopped.
+  // Results are buffered and rendered ONCE, at the end.
+  //
+  // Do not render incrementally into the page. The engine searches the whole
+  // document, and result lines contain the very words and clock times the
+  // fixtures do — so a live results panel becomes a matching candidate and the
+  // engine clicks its own report instead of a tile. (Observed: `has/Hyrox`
+  // resolving to <span class="fail">FAIL "Hyrox strength" … 19:00</span>.)
+  //
+  // Progress goes to document.title and the console instead: neither is
+  // reachable by the engine's selectors, so a hang is still diagnosable.
   function render() {
     out.innerHTML = lines.map(l =>
       '<span class="' + (l.indexOf('PASS') === 2 ? 'pass' : 'fail') + '">' + l.replace(/</g, '&lt;') + '</span>'
@@ -121,7 +129,8 @@
   function show(name, ok, detail) {
     (ok ? pass++ : fail++);
     lines.push((ok ? '  PASS  ' : '  FAIL  ') + name + (detail ? '\n          ' + detail : ''));
-    render();
+    document.title = (ok ? 'PASS' : 'FAIL') + ' ' + (pass + fail) + ' — ' + name;
+    console.log((ok ? 'PASS  ' : 'FAIL  ') + name + (detail ? ' | ' + detail : ''));
   }
   function eq(name, actual, expected) {
     const ok = JSON.stringify(actual) === JSON.stringify(expected);
@@ -251,9 +260,33 @@
   expectTile('Hyrox at 12:00 -> the 19:00 UPPERCASE tile', n.picked, 'HYROX', '19:00');
 
   n = await nearest('Yoga', 12, 0);
-  show('type with no class today fails cleanly',
-       n.res.ok === false && /geen les/.test(n.res.reason || ''),
-       'got ' + JSON.stringify({ ok: n.res.ok, reason: n.res.reason }));
+  show('type with no class today stops SOFTLY (roster is open; not a breakage)',
+       n.res.ok === false && n.res.soft === true && /geen les/.test(n.res.reason || ''),
+       'got ' + JSON.stringify({ ok: n.res.ok, soft: n.res.soft, reason: n.res.reason }));
+
+  // ---- {{TYPE_BASE}} fallback -------------------------------------------
+  // The roster names classes more coarsely than Dexos: "Hyrox strength" and
+  // "TRX Daluren" have no tile, but "Hyrox"/"TRX" do. The second candidate
+  // selector is what rescues them.
+  async function nearestWithBase(type, base, h, m) {
+    picked = null; freeze(h, m);
+    const res = await run(
+      [{ type: 'clickNearest', selectors: [['has/{{TYPE}}'], ['has/{{TYPE_BASE}}']] }],
+      { type, typeBase: base }
+    );
+    unfreeze();
+    return { res, picked };
+  }
+
+  n = await nearestWithBase('Hyrox strength', 'Hyrox', 12, 0);
+  expectTile('"Hyrox strength" falls back to the HYROX tile', n.picked, 'HYROX', '19:00');
+
+  n = await nearestWithBase('Crossfit Daluren', 'Crossfit', 9, 30);
+  expectTile('"Crossfit Daluren" falls back to the CrossFit tile', n.picked, 'CrossFit', '18:00');
+
+  // The exact type must still win when it does exist, rather than the looser base.
+  n = await nearestWithBase('CrossFit', 'CrossFit', 6, 0);
+  expectTile('exact type still preferred when present', n.picked, 'CrossFit', '7:00');
 
   // ---- deriveNavigate: must NOT navigate; must return the URL ------------
   const before = location.href;

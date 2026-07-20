@@ -468,7 +468,19 @@ kbd {
           startUrl: "https://lieftingfit.sportbitapp.nl/web/nl/events",
           steps: [
             { type: "navigate", url: "https://lieftingfit.sportbitapp.nl/web/nl/events" },
-            { type: "clickNearest", selectors: [["has/{{TYPE}}"]] },
+            // The roster defaults to ONE location (e.g. "Gym - beneden") and the
+            // gym has six. A class in the bokszaal / KidsFit zaal / Outdoor
+            // Project is simply absent under that filter, so the macro would say
+            // "geen les van dit type vandaag" for a class that is running.
+            // Switching to "Alle roosters" took today from 16 tiles / 6 types to
+            // 34 tiles / 13 types. It is a mat-select, not a native <select>, so
+            // it needs click-open + click-option rather than a `change` step.
+            { type: "click", selectors: [["mat-select"]] },
+            { type: "click", selectors: [["text/Alle roosters"]] },
+            // {{TYPE}} is a Dexos programming type; the roster uses its own,
+            // shorter names ("TRX Daluren" vs "Trx", "Hyrox strength" vs
+            // "HYROX"). Fall back to the first word so those still resolve.
+            { type: "clickNearest", selectors: [["has/{{TYPE}}"], ["has/{{TYPE_BASE}}"]] },
             {
               type: "deriveNavigate",
               from: "/events/(\\d+)",
@@ -579,6 +591,10 @@ kbd {
     return {
       type: config.selectedType,
       contextMode: null, // filled per shortcut below
+      // First word of the class type. The Sportbit roster names classes more
+      // coarsely than Dexos does, so "Hyrox strength" / "TRX Daluren" have to
+      // fall back to "Hyrox" / "TRX" to find a tile at all.
+      typeBase: String(config.selectedType || "").split(/[\s(\/-]+/)[0],
       todayISO: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()),
       todayDMY: pad(d.getDate()) + pad(d.getMonth() + 1) + d.getFullYear(), // ddmmyyyy, e.g. 19072026 (Dexos block ids)
       dayOfMonth: String(d.getDate()),
@@ -598,6 +614,10 @@ kbd {
         if (chrome.runtime.lastError) { toast("Kon de helper niet starten"); return; }
         if (!res) { toast("Geen antwoord van de helper"); return; }
         if (res.ok) { toast("✓ " + s.label + " geopend"); return; }
+        // A "soft" stop is not a breakage: the page the trainer needs is already
+        // open, there just was not one obvious class to jump to. Show the hint on
+        // its own — no step number, no alarm.
+        if (res.soft && res.reason) { toast(res.reason); return; }
         // Prefer the engine's specific reason ("geen les van dit type vandaag")
         // over the generic advice — for the built-in macros, re-recording is not
         // the fix, and the reason usually points straight at what to change.

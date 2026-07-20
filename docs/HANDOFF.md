@@ -78,9 +78,56 @@ required, so the roster → tile → Presentatie-modus path is unavoidable.
 
 ⚠️ **12-vs-41 mismatch.** `sel_programma` is a coarser grouping than the
 dashboard's 41 class types. `Hyrox strength`, `Booty`, `Kettlebell Training` etc.
-have **no** Coachboard option. Combined with the `setValue` bug below, a
-`{{TYPE}}` with no match casts the *wrong* class to the TV and still reports
-success.
+have **no** Coachboard option. Specialty classes are enumerated individually
+(`Specialty class 60+/Calisthenics/TRX/Yoga`) — there is no generic "Specialty
+classes" bucket, and Booty/Kettlebell are not among them.
+
+**This does not affect the shipping macro**, which never touches
+`sel_programma` — the coachboard URL is per-event, so Program and Class arrive
+already set. It only matters if someone later adds a `change` step on it; the
+`setValue` fix below makes that fail loudly rather than casting the wrong class.
+
+### ⚠️ The roster is filtered to ONE location by default
+
+The gym has **six** rosters: `Alle roosters`, `De machinekamer`,
+`Gym - KidsFit / TeenFit`, `The Outdoor Project!`, `Gym - beneden`,
+`Gym - bokszaal`. The page defaults to a single one, and the URL does not change
+with the filter, so it must be set actively.
+
+Measured on 2026-07-20: `Gym - beneden` showed **16 tiles / 6 types**;
+`Alle roosters` showed **34 tiles / 13 types**. A Kickboksen class in the
+bokszaal is simply invisible under the default filter — the Coachboard macro
+would have reported "no class today" for a class that was running. **This was by
+far the biggest source of user-facing failures.**
+
+The macro therefore opens with click-open + click-option on the location picker
+(it is a `mat-select`, not a native `<select>`, so a `change` step will not work).
+
+### Roster class names ≠ Dexos type names
+
+`{{TYPE}}` comes from the Dexos programming list; the roster names classes more
+coarsely. Hence the `{{TYPE_BASE}}` fallback (first word of the type) as a second
+candidate selector. Verified live against today's roster:
+
+| Dashboard type | Roster tile | Resolves? |
+|---|---|---|
+| `Hyrox strength` | `HYROX` | ✅ via TYPE_BASE |
+| `TRX Daluren` | `Trx` | ✅ via TYPE_BASE |
+| `Crossfit Daluren` | `CrossFit` | ✅ via TYPE_BASE |
+| `Yoga` | `Yoga` | ✅ direct |
+| `Kickboksen` | `Boksen` | ❌ dashboard name is *longer*; first-word fallback cannot help |
+| `Booty` | *(absent)* | ❌ not on Monday's roster |
+
+**Open question for Koen:** is roster `Boksen` the same class as Dexos
+`Kickboksen`? If so an explicit alias map is the fix. And does `Booty` run on
+other weekdays, or under another name? Until then both stop *softly* (below).
+
+### Soft stops — not every miss is a failure
+
+When `clickNearest` finds nothing, the roster tab is already open **and already
+switched to Alle roosters**, so the trainer can simply pick the class by hand.
+That result carries `soft: true` and the dashboard shows the reason alone —
+no step number, no "mislukt". Reserve hard failures for genuine breakage.
 
 ### 🚫 Presentatie-modus can never be clicked by a macro (worked around)
 
@@ -180,12 +227,18 @@ substring type matching, the `setValue` silent failure, the day-column-wrapper
 trap in `clickNearest` (all four time-of-day branches), clean failure when the
 type has no class today, and `deriveNavigate` returning rather than navigating.
 
-Two traps if you extend the fixtures:
+Three traps if you extend the fixtures — each one cost a debugging round:
 - **Detach inactive fixtures, don't `display:none` them.** `textContent`
   includes hidden descendants, so a hidden fixture leaks its words into the
   visible wrapper and turns should-fail cases green.
 - **Freeze only `new Date()`, never `Date.now()`.** `waitFor` times out on
   `Date.now() - start`; freezing it makes no-match cases spin forever.
+- **Never render results into the page while tests run.** The engine searches
+  the whole document, and result lines contain the same words and clock times as
+  the fixtures — so a live results panel becomes a match candidate and the engine
+  clicks its own report. (Seen: `has/Hyrox` resolving to
+  `<span class="fail">FAIL "Hyrox strength" … 19:00</span>`.) Progress goes to
+  `document.title` and the console, which the selectors cannot reach.
 
 ### The one untested link: loading the extension
 
