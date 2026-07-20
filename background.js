@@ -6,20 +6,29 @@
  * destination — the pop-up that a plain link can't reach.
  */
 
-// Open the dashboard in its own tab when the toolbar icon is clicked.
-chrome.action.onClicked.addListener(function () {
-  chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
-});
+// Guarded so this file can also be loaded by docs/test/engine-tests.html, which
+// exercises replayInPage against DOM fixtures. Chrome forbids attaching a
+// debugger to chrome-extension:// pages, so the extension UI cannot be driven
+// by tooling — testing the REAL source in a plain page is the only way to keep
+// the engine covered without hand-copying it (and letting the copy drift).
+var IS_EXTENSION = typeof chrome !== "undefined" && !!(chrome.runtime && chrome.runtime.id);
 
-chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
-  if (msg && msg.action === "runMacro") {
-    runMacro(msg).then(sendResponse).catch(function (e) {
-      sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
-    });
-    return true; // keep the message channel open for the async response
-  }
-  return false;
-});
+if (IS_EXTENSION) {
+  // Open the dashboard in its own tab when the toolbar icon is clicked.
+  chrome.action.onClicked.addListener(function () {
+    chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
+  });
+
+  chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
+    if (msg && msg.action === "runMacro") {
+      runMacro(msg).then(sendResponse).catch(function (e) {
+        sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
+      });
+      return true; // keep the message channel open for the async response
+    }
+    return false;
+  });
+}
 
 async function runMacro(msg) {
   var startUrl = msg.startUrl;

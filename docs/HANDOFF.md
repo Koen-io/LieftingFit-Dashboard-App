@@ -158,6 +158,35 @@ engine — tiles there fall back to `url`.
 vandaag`, `optie "X" bestaat niet in deze lijst`) instead of the old generic
 "neem de flow opnieuw op", which was wrong advice for built-in macros.
 
+### Regression tests — `docs/test/engine-tests.html`
+
+17 checks covering every bug found so far. They load **the real
+`background.js`** and run `replayInPage` against DOM fixtures copied from the
+live site — no hand-copied engine, so the tests cannot drift from the source.
+
+```bash
+python3 -m http.server 8791      # from the repo root
+# open http://localhost:8791/docs/test/engine-tests.html
+```
+
+Green = all pass. `window.__testSummary` holds `{pass, fail}` for scripting.
+It needs a server because `file://` blocks the `<script src>` cross-origin read.
+
+`background.js` registers its `chrome.*` listeners behind an `IS_EXTENSION`
+guard purely so this page can load it. Keep that guard.
+
+Covered: the CSS-uppercased tab, uppercase-in-data Hyrox blocks, exact-vs-
+substring type matching, the `setValue` silent failure, the day-column-wrapper
+trap in `clickNearest` (all four time-of-day branches), clean failure when the
+type has no class today, and `deriveNavigate` returning rather than navigating.
+
+Two traps if you extend the fixtures:
+- **Detach inactive fixtures, don't `display:none` them.** `textContent`
+  includes hidden descendants, so a hidden fixture leaks its words into the
+  visible wrapper and turns should-fail cases green.
+- **Freeze only `new Date()`, never `Date.now()`.** `waitFor` times out on
+  `Date.now() - start`; freezing it makes no-match cases spin forever.
+
 ### The one untested link: loading the extension
 
 Every macro has been verified by running the engine's exact logic in the live

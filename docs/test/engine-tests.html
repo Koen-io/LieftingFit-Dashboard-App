@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LieftingFit macro engine — regression tests</title>
+<style>
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 24px; background:#111; color:#ddd; }
+  h1 { font-size: 16px; }
+  #out { white-space: pre-wrap; }
+  .pass { color:#5cd65c; } .fail { color:#ff6b6b; } .sum { color:#8ab4ff; }
+  #fixtures { position:absolute; left:-9999px; top:0; }  /* offscreen but laid out, so visible() is true */
+</style>
+</head>
+<body>
+<h1>LieftingFit macro engine — regression tests</h1>
+<div id="out">running…</div>
+
+<!--
+  Fixtures mirror the REAL DOM observed on the live site on 2026-07-20.
+  The details below are load-bearing — each one caused a bug:
+
+  * Dexos tab text is "Workout programmering" (sentence case) uppercased by CSS.
+  * Hyrox day blocks are literally uppercase in the data (text-transform:none),
+    while CrossFit blocks are title case.
+  * The roster's day-column wrapper contains every tile in that column, so it
+    matches {{TYPE}} through a child while its own first time belongs to a
+    different class.
+  * Type lists contain prefix collisions (Hyrox / Hyrox daluren / Hyrox strength).
+-->
+<div id="fixtures">
+
+  <!-- ---------- Dexos: Planning > Workout programmering ---------- -->
+  <div id="fx-dexos">
+    <span>Planning</span>
+    <div class="sbm-supertabs">
+      <a href="javascript: void(0);" style="text-transform:uppercase">Groepslessen</a>
+      <a id="dexos-tab" href="javascript: void(0);" style="text-transform:uppercase">Workout programmering</a>
+    </div>
+    <select id="sel_overzicht">
+      <option>Weekoverzicht</option>
+      <option selected>Maandoverzicht</option>
+    </select>
+    <select id="sel_eventtypeId">
+      <option>Booty</option>
+      <option selected>CrossFit</option>
+      <option>Crossfit Daluren</option>
+      <option>CrossFit open</option>
+      <option>Hyrox</option>
+      <option>Hyrox daluren</option>
+      <option>Hyrox strength</option>
+      <option>Yoga</option>
+    </select>
+    <button>Exporteer</button>
+    <div class="m-cell">
+      <div class="m-program" id="cf-today">CrossFit Warm Up 20072026<br>CrossFit Workout 20072026</div>
+    </div>
+    <div class="m-cell">
+      <div class="m-program" id="hy-today">HYROX 20072026</div>
+    </div>
+    <div id="dexos-panel">
+      <button id="btn-bekijk">Bekijk / Wijzig</button>
+      <button>Maak kopie</button>
+    </div>
+  </div>
+
+  <!-- ---------- Sportbit roster (Angular-shaped) ---------- -->
+  <!-- Avond column: OpenGym 17:00 sits BEFORE the 18:00 CrossFit, so the
+       wrapper's first time is 17:00 — the exact trap that made clickNearest
+       pick the wrong class before the leaf filter was added. -->
+  <div id="fx-roster">
+    <div class="calendar-dv__card-wrapper" id="col-ochtend">
+      <div class="calendar-card"><div class="columns"><div class="column is-10">
+        <span class="title">CrossFit</span>7:00 - 8:00 Pelle Staub
+      </div></div></div>
+      <div class="calendar-card"><div class="columns"><div class="column is-10">
+        <span class="title">Hyrox</span>9:00 - 10:00 Pelle Staub
+      </div></div></div>
+    </div>
+    <div class="calendar-dv__card-wrapper" id="col-avond">
+      <div class="calendar-card"><div class="columns"><div class="column is-10">
+        <span class="title">OpenGym</span>17:00 - 17:30 Gym LieftingFit
+      </div></div></div>
+      <div class="calendar-card"><div class="columns"><div class="column is-10">
+        <span class="title">CrossFit</span>18:00 - 19:00 Jim van Aken
+      </div></div></div>
+      <div class="calendar-card"><div class="columns"><div class="column is-10">
+        <span class="title">HYROX</span>19:00 - 20:00 Jim van Aken
+      </div></div></div>
+      <div class="calendar-card"><div class="columns"><div class="column is-10">
+        <span class="title">CrossFit</span>20:00 - 21:00 Jim van Aken
+      </div></div></div>
+    </div>
+  </div>
+
+  <!-- ---------- Coachboard toolbar (12 coarse groups, not 41 types) ---------- -->
+  <div id="fx-coachboard">
+    <select id="sel_programma">
+      <option selected>CrossFit</option>
+      <option>Fitness</option>
+      <option>OpenGym</option>
+      <option>Hyrox</option>
+      <option>Daluren</option>
+    </select>
+  </div>
+</div>
+
+<script src="../../background.js"></script>
+<script>
+(async function () {
+  const out = document.getElementById('out');
+  let pass = 0, fail = 0;
+  const lines = [];
+
+  // Render after every check, not just at the end: a hang in any single case
+  // otherwise leaves the page stuck on "running…" with no clue where it stopped.
+  function render() {
+    out.innerHTML = lines.map(l =>
+      '<span class="' + (l.indexOf('PASS') === 2 ? 'pass' : 'fail') + '">' + l.replace(/</g, '&lt;') + '</span>'
+    ).join('\n');
+  }
+  function show(name, ok, detail) {
+    (ok ? pass++ : fail++);
+    lines.push((ok ? '  PASS  ' : '  FAIL  ') + name + (detail ? '\n          ' + detail : ''));
+    render();
+  }
+  function eq(name, actual, expected) {
+    const ok = JSON.stringify(actual) === JSON.stringify(expected);
+    show(name, ok, ok ? '' : 'expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
+  }
+
+  // Only the named fixture is on screen for a given run, so selectors cannot
+  // match across fixtures (the real pages are never merged like this).
+  // Detach rather than display:none. textContent includes hidden descendants,
+  // so a hidden fixture still leaks its words into the visible #fixtures
+  // wrapper — which made `has/Yoga` match the wrapper (via the hidden Dexos
+  // <option>Yoga</option>) and pick up a time from the roster, turning a
+  // should-fail case into a pass.
+  const FIXTURES = ['fx-dexos', 'fx-roster', 'fx-coachboard'];
+  const host = document.getElementById('fixtures');
+  const stash = {};
+  FIXTURES.forEach(f => { stash[f] = document.getElementById(f); });
+  function only(id) {
+    FIXTURES.forEach(f => {
+      const el = stash[f];
+      if (f === id) { if (!el.isConnected) host.appendChild(el); }
+      else if (el.isConnected) el.remove();
+    });
+  }
+
+  // Run the REAL engine (from ../../background.js) over the visible fixture.
+  async function run(steps, context) {
+    return await replayInPage(steps, context || {});
+  }
+
+  // ---- Dexos: the step-3 regression -------------------------------------
+  only('fx-dexos');
+  let clicked = null;
+  document.getElementById('dexos-tab').addEventListener('click', () => { clicked = 'tab'; });
+  let r = await run([{ type: 'click', selectors: [['text/WORKOUT PROGRAMMERING']] }], {});
+  eq('step3: CSS-uppercased tab matches case-insensitively', [r.ok, clicked], [true, 'tab']);
+
+  // ---- Dexos: type selection with prefix collisions ----------------------
+  const typeSel = document.getElementById('sel_eventtypeId');
+  r = await run([{ type: 'change', value: '{{TYPE}}', selectors: [['selopt/CrossFit']] }], { type: 'Hyrox' });
+  eq('exact match beats substring (Hyrox, not Hyrox daluren)', [r.ok, typeSel.value], [true, 'Hyrox']);
+
+  r = await run([{ type: 'change', value: '{{TYPE}}', selectors: [['selopt/CrossFit']] }], { type: 'Hyrox strength' });
+  eq('multi-word type resolves exactly', [r.ok, typeSel.value], [true, 'Hyrox strength']);
+
+  // ---- setValue: the silent-failure bug ---------------------------------
+  r = await run([{ type: 'change', value: '{{TYPE}}', selectors: [['selopt/CrossFit']] }], { type: 'Kettlebell Training' });
+  show('unmatched option FAILS instead of silently keeping the old value',
+       r.ok === false && /bestaat niet/.test(r.reason || ''),
+       'got ' + JSON.stringify({ ok: r.ok, reason: r.reason }));
+  eq('  …and the previous selection is left untouched', typeSel.value, 'Hyrox strength');
+
+  // ---- Dexos: day blocks, both casings ----------------------------------
+  let hit = null;
+  document.getElementById('cf-today').addEventListener('click', () => { hit = 'crossfit'; });
+  document.getElementById('hy-today').addEventListener('click', () => { hit = 'hyrox'; });
+
+  hit = null;
+  r = await run([{ type: 'click', selectors: [['has/{{TODAY_DMY}}&&{{TYPE}}']] }], { type: 'CrossFit', todayDMY: '20072026' });
+  eq('title-case block (CrossFit) matched', [r.ok, hit], [true, 'crossfit']);
+
+  hit = null;
+  r = await run([{ type: 'click', selectors: [['has/{{TODAY_DMY}}&&{{TYPE}}']] }], { type: 'Hyrox', todayDMY: '20072026' });
+  eq('UPPERCASE-in-data block (HYROX) matched from "Hyrox"', [r.ok, hit], [true, 'hyrox']);
+
+  // ---- Bekijk / Wijzig ---------------------------------------------------
+  let bekijk = false;
+  document.getElementById('btn-bekijk').addEventListener('click', () => { bekijk = true; });
+  r = await run([{ type: 'click', selectors: [['text/Bekijk / Wijzig'], ['has/Bekijk']] }], {});
+  eq('Bekijk / Wijzig resolves', [r.ok, bekijk], [true, true]);
+
+  // ---- clickNearest: the day-column-wrapper trap -------------------------
+  only('fx-roster');
+  function tileAt(colId, idx) { return document.querySelectorAll('#' + colId + ' .calendar-card')[idx]; }
+  let picked = null;
+  document.querySelectorAll('#fx-roster .calendar-card').forEach(card => {
+    card.addEventListener('click', () => {
+      picked = card.textContent.replace(/\s+/g, ' ').trim().slice(0, 24);
+    });
+  });
+
+  // Freeze "now" so the test is deterministic regardless of when it runs.
+  //
+  // Freeze ONLY `new Date()` (the wall clock clickNearest reads). Date.now()
+  // must keep ticking: waitFor loops on `Date.now() - start < STEP_TIMEOUT`, so
+  // a frozen now() makes that difference permanently 0 and the no-match cases
+  // spin forever instead of timing out.
+  const RealDate = Date;
+  function freeze(h, m) {
+    window.Date = class extends RealDate {
+      constructor(...a) { if (a.length) return new RealDate(...a); return new RealDate(2026, 6, 20, h, m); }
+      static now() { return RealDate.now(); }
+    };
+  }
+  function unfreeze() { window.Date = RealDate; }
+
+  async function nearest(type, h, m) {
+    picked = null; freeze(h, m);
+    const res = await run([{ type: 'clickNearest', selectors: [['has/{{TYPE}}']] }], { type });
+    unfreeze();
+    return { res, picked };
+  }
+
+  // Assert on the type + start time, not the exact tile string: the fixture's
+  // whitespace is incidental and made these fail while the engine was correct.
+  // NB: must not be named `picked` — a `let picked` already exists in this
+  // scope, and `let` + `function` with the same name is a SyntaxError that
+  // kills the entire script before a single check runs.
+  function expectTile(name, got, type, time) {
+    const ok = !!got && got.toLowerCase().indexOf(type.toLowerCase()) === 0 && got.indexOf(time) >= 0;
+    show(name, ok, ok ? '' : 'expected a ' + type + ' tile at ' + time + ', got ' + JSON.stringify(got));
+  }
+
+  let n = await nearest('CrossFit', 6, 0);
+  expectTile('06:00 -> first CrossFit (07:00)', n.picked, 'CrossFit', '7:00');
+
+  n = await nearest('CrossFit', 9, 30);
+  expectTile('09:30 -> 18:00 CrossFit, NOT the 17:00 OpenGym wrapper', n.picked, 'CrossFit', '18:00');
+
+  n = await nearest('CrossFit', 18, 30);
+  expectTile('18:30 -> next is 20:00', n.picked, 'CrossFit', '20:00');
+
+  n = await nearest('CrossFit', 23, 0);
+  expectTile('23:00 (all started) -> falls back to last (20:00)', n.picked, 'CrossFit', '20:00');
+
+  n = await nearest('Hyrox', 12, 0);
+  expectTile('Hyrox at 12:00 -> the 19:00 UPPERCASE tile', n.picked, 'HYROX', '19:00');
+
+  n = await nearest('Yoga', 12, 0);
+  show('type with no class today fails cleanly',
+       n.res.ok === false && /geen les/.test(n.res.reason || ''),
+       'got ' + JSON.stringify({ ok: n.res.ok, reason: n.res.reason }));
+
+  // ---- deriveNavigate: must NOT navigate; must return the URL ------------
+  const before = location.href;
+  r = await run([{
+    type: 'deriveNavigate',
+    from: '/engine-tests\\.html',
+    to: 'https://lieftingfit.sportbitapp.nl/cbm/coachboard/999/'
+  }], {});
+  show('deriveNavigate returns navigateTo instead of navigating',
+       r.ok === true && r.navigateTo === 'https://lieftingfit.sportbitapp.nl/cbm/coachboard/999/' && location.href === before,
+       'got ' + JSON.stringify({ ok: r.ok, navigateTo: r.navigateTo, moved: location.href !== before }));
+  eq('  …and hands back the remaining steps', Array.isArray(r.remaining), true);
+
+  // ---- Coachboard: 12 groups vs 41 types --------------------------------
+  only('fx-coachboard');
+  r = await run([{ type: 'change', value: '{{TYPE}}', selectors: [['selopt/CrossFit']] }], { type: 'Hyrox strength' });
+  show('Coachboard rejects a type it has no group for (rather than casting the wrong class)',
+       r.ok === false && /bestaat niet/.test(r.reason || ''),
+       'got ' + JSON.stringify({ ok: r.ok, reason: r.reason }));
+
+  FIXTURES.forEach(f => { if (!stash[f].isConnected) host.appendChild(stash[f]); });
+
+  const sum = (fail === 0)
+    ? '\nAll ' + pass + ' checks passed.'
+    : '\n' + pass + ' passed, ' + fail + ' FAILED.';
+  render();
+  out.innerHTML += '<span class="sum">' + sum + '</span>';
+  window.__testSummary = { pass, fail };
+})();
+</script>
+</body>
+</html>
