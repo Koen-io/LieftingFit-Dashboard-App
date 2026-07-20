@@ -130,8 +130,15 @@ boolean and the `change` step fails with `optie "X" bestaat niet in deze lijst`.
   comparison before innermost is ever applied. **Keep the leaf filter first.**
 
 - **`deriveNavigate {from, to}`** — regex the current URL, substitute `$1…`, and
-  `location.href` to the result. Waits for the SPA route change. Exists to dodge
-  the popup blocker (above).
+  **return** `{navigateTo, remaining}` for `runMacro` to act on. Waits for the SPA
+  route change. Exists to dodge the popup blocker (above).
+
+  ⚠️ It must NOT assign `location.href` itself. `chrome.scripting.executeScript`
+  awaits the injected function's promise; navigating from inside tears down that
+  execution context before it resolves, so the extension gets `null` and toasts a
+  **false failure** while the page actually moved correctly. `runMacro` now does
+  the hop via `chrome.tabs.update` and re-injects any remaining steps (max 5 hops).
+  **Any future step that navigates must follow this pattern.**
 
 ### Status
 
@@ -146,6 +153,25 @@ boolean and the `change` step fails with `optie "X" bestaat niet in deze lijst`.
 **Note:** macros only run in the **Chrome extension** (the engine lives in
 `background.js`). The standalone HTML carries the macro definitions but has no
 engine — tiles there fall back to `url`.
+
+**Failure toasts now show the engine's reason** (`geen les van dit type
+vandaag`, `optie "X" bestaat niet in deze lijst`) instead of the old generic
+"neem de flow opnieuw op", which was wrong advice for built-in macros.
+
+### The one untested link: loading the extension
+
+Every macro has been verified by running the engine's exact logic in the live
+page, and `runMacro`'s navigation hop has been reviewed, but **the extension has
+never actually been loaded**. Chrome blocks scripting of `chrome://extensions`,
+so this last step needs a human:
+
+1. `chrome://extensions` → enable **Developer mode**
+2. **Load unpacked** → pick this folder
+3. Click the toolbar icon, then each tile
+
+Expect: Coachboard → today's next class of the selected type on the TV;
+Weekprogramma → that type's week grid; Training aanpassen → the editor pop-up.
+If a tile fails, the toast now names the step and the reason.
 
 `build-standalone.mjs` had `/home/user/...` hardcoded and could not run outside
 the cloud sandbox; it now resolves paths relative to itself.

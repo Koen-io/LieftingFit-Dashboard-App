@@ -29,13 +29,33 @@ async function runMacro(msg) {
   var tab = await chrome.tabs.create({ url: startUrl, active: true });
   await waitForTabComplete(tab.id, 20000);
 
-  var results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: replayInPage,
-    args: [steps, msg.context || {}]
-  });
-  var res = results && results[0] ? results[0].result : null;
+  var res = await inject(tab.id, steps, msg.context || {});
+
+  // A step may hand back a URL instead of navigating itself (deriveNavigate).
+  // It has to: assigning location.href inside the injected function destroys
+  // its execution context mid-flight, so the promise never resolves and the
+  // macro reports a false failure even though the page moved. Navigating from
+  // here keeps the result intact, then we re-inject whatever steps remain.
+  var hops = 0;
+  while (res && res.ok && res.navigateTo && hops++ < 5) {
+    var acted = res.acted || 0;
+    var remaining = res.remaining || [];
+    await chrome.tabs.update(tab.id, { url: res.navigateTo });
+    await waitForTabComplete(tab.id, 20000);
+    if (!remaining.length) return { ok: true, acted: acted };
+    res = await inject(tab.id, remaining, msg.context || {});
+    if (res) res.acted = (res.acted || 0) + acted;
+  }
   return res || { ok: false, error: "Geen resultaat van de pagina." };
+}
+
+async function inject(tabId, steps, context) {
+  var results = await chrome.scripting.executeScript({
+    target: { tabId: tabId },
+    func: replayInPage,
+    args: [steps, context]
+  });
+  return results && results[0] ? results[0].result : null;
 }
 
 function waitForTabComplete(tabId, timeoutMs) {
@@ -356,9 +376,11 @@ function replayInPage(steps, context) {
           }
           if (!mm) return done({ ok: false, failedStep: i + 1, reason: "verwachte pagina niet bereikt", label: step.from });
           var dest = step.to.replace(/\$(\d)/g, function (_, d) { return mm[Number(d)] || ""; });
-          location.href = dest;
-          acted++;
-          await sleep(SETTLE);
+          // Hand the URL back rather than assigning location.href: navigating
+          // from here would tear down this execution context before the promise
+          // resolves, and the macro would report a false failure. runMacro
+          // navigates the tab and re-injects the steps after this one.
+          return done({ ok: true, navigateTo: dest, remaining: steps.slice(i + 1), acted: acted + 1 });
         } else if (type === "waitForElement") {
           await waitFor(cands);
         } else if (type === "keyDown" || type === "keyUp" || type === "hover") {

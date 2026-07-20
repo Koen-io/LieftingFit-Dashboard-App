@@ -194,8 +194,14 @@
       function (res) {
         if (chrome.runtime.lastError) { toast("Kon de helper niet starten"); return; }
         if (!res) { toast("Geen antwoord van de helper"); return; }
-        if (res.ok) toast("✓ " + s.label + " geopend");
-        else toast("Stap " + (res.failedStep || "?") + " mislukt" + (res.label ? " (" + res.label + ")" : "") + " — neem de flow opnieuw op");
+        if (res.ok) { toast("✓ " + s.label + " geopend"); return; }
+        // Prefer the engine's specific reason ("geen les van dit type vandaag")
+        // over the generic advice — for the built-in macros, re-recording is not
+        // the fix, and the reason usually points straight at what to change.
+        var why = res.reason || res.error;
+        toast("Stap " + (res.failedStep || "?") + " mislukt"
+          + (why ? ": " + why : "")
+          + (res.label ? " (" + res.label + ")" : ""));
       }
     );
   }
