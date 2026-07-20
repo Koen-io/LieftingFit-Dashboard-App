@@ -132,3 +132,52 @@ html.lf-has-titlebar body { padding-top: 52px !important; }
 html.lf-has-titlebar body:has(#lf-titlebar.lf-autohide) { padding-top: 6px !important; }
 
 @media print { #lf-titlebar { display: none !important; } }
+
+/* "No class today" dialog, injected over Sportbit/Dexos.
+   Matches the dashboard's dialog so the trainer sees one consistent message
+   whether they clicked a tile or a titlebar button. */
+#lf-noclass {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(6, 8, 11, 0.72) !important;
+  backdrop-filter: blur(2px);
+  font: 400 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+}
+#lf-noclass .lf-nc-box {
+  box-sizing: border-box !important;
+  width: min(520px, calc(100vw - 48px)) !important;
+  padding: 26px 28px !important;
+  border-radius: 16px !important;
+  background: #14181d !important;
+  border: 1px solid #2b3138 !important;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.6) !important;
+  color: #e6e8ea !important;
+  text-align: left !important;
+}
+#lf-noclass .lf-nc-title {
+  margin: 0 0 12px !important;
+  font-size: 21px !important; font-weight: 800 !important;
+  color: #fff !important;
+}
+#lf-noclass .lf-nc-lead { margin: 0 0 10px !important; font-size: 16px !important; color: #e6e8ea !important; }
+#lf-noclass .lf-nc-sub  { margin: 0 0 20px !important; font-size: 14px !important; color: #9aa3ad !important; }
+#lf-noclass .lf-nc-row { display: flex !important; gap: 10px !important; justify-content: flex-end !important; }
+#lf-noclass .lf-nc-btn {
+  appearance: none !important;
+  border: 1px solid #3a424b !important;
+  background: #1d232a !important;
+  color: #e6e8ea !important;
+  padding: 11px 18px !important;
+  border-radius: 10px !important;
+  font: 600 15px/1 inherit !important;
+  cursor: pointer !important;
+}
+#lf-noclass .lf-nc-btn:hover { background: #262e37 !important; }
+#lf-noclass .lf-nc-primary {
+  background: #e2673c !important; border-color: #e2673c !important; color: #fff !important;
+}
+#lf-noclass .lf-nc-primary:hover { background: #ef7549 !important; }

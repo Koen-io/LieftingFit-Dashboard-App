@@ -221,6 +221,13 @@ body {
 /* The Rooster tile's own picker. Deliberately NOT tied to the class-type
    dropdown: which room's schedule you want is a separate question from which
    class you are coaching. */
+/* Tiles that carry a picker are a <div>, not an <a> — a <select> inside an
+   anchor can never be opened, the browser just follows the link. The body is
+   the click target; the select sits outside it. */
+.tile-has-picker { cursor: default; }
+.tile-has-picker .tile-top,
+.tile-has-picker .tile-body { cursor: pointer; }
+
 .tile-roster {
   appearance: none;
   display: block; width: 100%; margin-top: 12px;
@@ -394,3 +401,7 @@ kbd {
   .clock { order: 3; margin-left: 0; text-align: left; }
   .topbar-actions { margin-left: auto; }
 }
+
+/* "Geen les gevonden" dialog on the dashboard. */
+.noclass-lead { margin: 0 0 10px; font-size: 16px; color: var(--text); }
+.noclass-select { margin-top: 16px; width: 100%; min-width: 0; }

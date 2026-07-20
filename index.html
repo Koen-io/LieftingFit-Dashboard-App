@@ -98,6 +98,23 @@
   </div>
 </div>
 
+<!-- Shown when the selected class type has no lesson on today's roster.
+     Nothing is opened in that case — see the probe in background.js. -->
+<div class="modal-overlay" id="noClassModal" hidden>
+  <div class="modal modal-narrow" role="alertdialog" aria-modal="true" aria-labelledby="noClassTitle">
+    <div class="modal-head">
+      <h2 id="noClassTitle">Geen les gevonden</h2>
+      <button class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="modal-body" id="noClassBody"><!-- injected --></div>
+    <div class="modal-foot">
+      <div class="foot-right" style="margin-left:auto">
+        <button class="btn btn-primary" data-close>Ander lestype kiezen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 
 <script src="app.js"></script>

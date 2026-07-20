@@ -315,17 +315,19 @@
   }
 
   function runMacro(s) {
-    var startUrl = (s.macro && s.macro.startUrl) || s.url;
-    var ctx = buildContext();
-    ctx.contextMode = s.contextMode || "none";
-    ctx.roster = s.selectedRoster || "";  // the tile's own picker, not {{TYPE}}
     toast("Bezig: " + s.label + " openen…");
+    // Goes through runTool, not runMacro, so the tile gets the same
+    // "is there actually a class?" probe as the titlebar buttons. runMacro
+    // would navigate this tab first and only discover the problem afterwards.
     chrome.runtime.sendMessage(
-      { action: "runMacro", startUrl: startUrl, steps: s.macro.steps, context: ctx },
+      { action: "runTool", tool: s.id },
       function (res) {
         if (chrome.runtime.lastError) { toast("Kon de helper niet starten"); return; }
         if (!res) { toast("Geen antwoord van de helper"); return; }
         if (res.ok) { toast("✓ " + s.label + " geopend"); return; }
+        // No class of this type today: nothing was opened, so explain it
+        // properly in a dialog rather than a toast that slides away.
+        if (res.noClass) { showNoClass(res.type || config.selectedType, s.label); return; }
         // A "soft" stop is not a breakage: the page the trainer needs is already
         // open, there just was not one obvious class to jump to. Show the hint on
         // its own — no step number, no alarm.
@@ -339,6 +341,35 @@
           + (res.label ? " (" + res.label + ")" : ""));
       }
     );
+  }
+
+  // Nothing was opened — say why, and make picking another type the obvious
+  // next step. Deliberately a dialog, not a toast: a toast that vanishes after
+  // 2.6s is the wrong shape for "the thing you asked for does not exist today".
+  function showNoClass(type, label) {
+    var weekday = new Date().toLocaleDateString("nl-NL", { weekday: "long" });
+    var body = $("#noClassBody");
+    body.innerHTML =
+      '<p class="noclass-lead">Er staat vandaag (<b>' + escapeHtml(weekday) + '</b>) geen les van het type ' +
+      '<b>' + escapeHtml(type) + '</b> in het rooster.</p>' +
+      '<p class="help-text">Daarom is <b>' + escapeHtml(label) + '</b> niet geopend — je zou anders op een ' +
+      'leeg of verkeerd scherm uitkomen.</p>' +
+      '<p class="help-text">Kies hieronder een ander lestype en probeer het opnieuw.</p>';
+
+    var pick = el("select", { "class": "type-select noclass-select", "aria-label": "Kies een ander lestype" });
+    config.classTypes.forEach(function (name) {
+      var opt = el("option", { value: name }, escapeHtml(name));
+      if (name === config.selectedType) opt.selected = true;
+      pick.appendChild(opt);
+    });
+    pick.addEventListener("change", function () {
+      config.selectedType = pick.value;
+      saveConfig(config);
+      renderAll();
+      toast("Lestype: " + pick.value);
+    });
+    body.appendChild(pick);
+    show("#noClassModal");
   }
 
   var toastTimer;
@@ -366,15 +397,21 @@
       var accent = ACCENTS.indexOf(s.accent) >= 0 ? s.accent : "blue";
       var hasMacro = !!(s.macro && Array.isArray(s.macro.steps) && s.macro.steps.length);
       var fallbackUrl = hasMacro ? (s.macro.startUrl || s.url) : s.url;
+      var hasRosterPickerEarly = Array.isArray(s.rosterOptions) && s.rosterOptions.length;
       var attrs = { "class": "tile acc-" + accent };
-      // No target=_blank inside the extension: tools must stay in this (cast)
-      // tab. The href is kept so the tile is still a real link when the page is
-      // opened as a plain web page, where there is no titlebar to come back with.
-      if (fallbackUrl) {
+      // A tile with its own picker must NOT be an <a>. A <select> inside an
+      // anchor cannot be used: the browser activates the link on click, so the
+      // dropdown never opens and the trainer is thrown straight to the Rooster.
+      // stopPropagation does not help — link activation is the browser's default
+      // action, not a bubbling listener. So those tiles become a <div> whose
+      // body is clickable, with the select as a sibling of the clickable part.
+      if (!hasRosterPickerEarly && fallbackUrl) {
         attrs.href = fallbackUrl;
         if (!IS_EXT) { attrs.target = "_blank"; attrs.rel = "noopener"; }
-      } else { attrs.href = "#"; }
-      var tile = el("a", attrs);
+      } else if (!hasRosterPickerEarly) {
+        attrs.href = "#";
+      }
+      var tile = el(hasRosterPickerEarly ? "div" : "a", attrs);
       var badge = "";
       if (hasMacro) badge = '<span class="tile-cast tile-macro">' + ICONS.bolt + " 1-klik dieplink</span>";
       else if (s.cast) badge = '<span class="tile-cast">' + ICONS.cast + " Casten naar TV</span>";
@@ -394,7 +431,16 @@
           badge +
         "</div>";
 
+      function activate(e) {
+        if (hasMacro && IS_EXT) { if (e) e.preventDefault(); runMacro(s); return; }
+        if (hasMacro && !IS_EXT) { toast("Installeer de Chrome-extensie voor de 1-klik dieplink — nu open ik de startpagina"); return; }
+        if (fallbackUrl && IS_EXT) { if (e) e.preventDefault(); openUrl(fallbackUrl); return; }
+        if (!fallbackUrl) { if (e) e.preventDefault(); toast("Geen URL ingesteld — open Instellingen"); }
+      }
+
       // The Rooster tile carries its own picker instead of the {{TYPE}} chip.
+      // Only the tile BODY opens the roster; the picker is a sibling, so using
+      // it never triggers navigation.
       if (hasRosterPicker) {
         var pick = el("select", { "class": "tile-roster", "aria-label": "Kies rooster" });
         s.rosterOptions.forEach(function (name) {
@@ -402,25 +448,25 @@
           if (name === s.selectedRoster) opt.selected = true;
           pick.appendChild(opt);
         });
-        // Stop clicks/keys reaching the tile — choosing a roster must not also
-        // fire the tile's navigation.
+        pick.addEventListener("change", function (e) {
+          e.stopPropagation();
+          s.selectedRoster = pick.value;
+          saveConfig(config);
+          toast("Rooster ingesteld: " + pick.value);
+        });
+        // Belt and braces if the markup is ever nested again.
         ["click", "mousedown", "keydown"].forEach(function (evt) {
           pick.addEventListener(evt, function (e) { e.stopPropagation(); });
         });
-        pick.addEventListener("change", function () {
-          s.selectedRoster = pick.value;
-          saveConfig(config);
-          toast("Rooster: " + pick.value);
-        });
-        tile.querySelector(".tile-body").appendChild(pick);
-      }
 
-      tile.addEventListener("click", function (e) {
-        if (hasMacro && IS_EXT) { e.preventDefault(); runMacro(s); return; }
-        if (hasMacro && !IS_EXT) { toast("Installeer de Chrome-extensie voor de 1-klik dieplink — nu open ik de startpagina"); return; }
-        if (fallbackUrl && IS_EXT) { e.preventDefault(); openUrl(fallbackUrl); return; }
-        if (!fallbackUrl) { e.preventDefault(); toast("Geen URL ingesteld — open Instellingen"); }
-      });
+        var hitArea = tile.querySelector(".tile-body");
+        tile.classList.add("tile-has-picker");
+        tile.querySelector(".tile-top").addEventListener("click", activate);
+        hitArea.addEventListener("click", activate);
+        tile.appendChild(pick);   // sibling of .tile-body, NOT inside it
+      } else {
+        tile.addEventListener("click", activate);
+      }
       grid.appendChild(tile);
     });
   }
@@ -874,7 +920,7 @@
     // close buttons / overlay click
     document.querySelectorAll("[data-close]").forEach(function (b) {
       b.addEventListener("click", function () {
-        hide("#settingsModal"); hide("#castModal");
+        hide("#settingsModal"); hide("#castModal"); hide("#noClassModal");
       });
     });
     document.querySelectorAll(".modal-overlay").forEach(function (ov) {

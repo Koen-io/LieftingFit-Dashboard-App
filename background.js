@@ -130,6 +130,43 @@ async function loadConfigForBackground() {
   catch (e) { return null; }
 }
 
+var ROSTER_URL = "https://lieftingfit.sportbitapp.nl/web/nl/events";
+var DEXOS_URL = "https://lieftingfit.sportbitapp.nl/dexos/";
+
+/* Check whether the class actually exists BEFORE the room tab goes anywhere.
+ *
+ * Koen's requirement: if today's roster has no class of the selected type, the
+ * trainer should get a message — not a Coachboard or a Dexos screen for the
+ * wrong thing. Running the macro in the room tab and failing afterwards would
+ * still have navigated it, leaving the TV on a stray page.
+ *
+ * So the probe runs in a BACKGROUND tab (`active:false`) that is closed again
+ * either way. The trainer's tab — the one being cast — is only touched once we
+ * know there is something to show. Costs one extra page load per click.
+ */
+async function probeInHiddenTab(url, steps, ctx) {
+  var tab = null;
+  try {
+    tab = await chrome.tabs.create({ url: url, active: false });
+    await waitForTabComplete(tab.id, 20000);
+    var res = await inject(tab.id, steps, ctx);
+    return res || { ok: false, reason: "geen resultaat" };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  } finally {
+    if (tab) { try { await chrome.tabs.remove(tab.id); } catch (e) {} }
+  }
+}
+
+function noClassResult(ctx) {
+  return {
+    ok: false,
+    noClass: true,          // the dashboard/titlebar shows a dialog for this
+    type: ctx.type,
+    reason: "Er staat vandaag geen les van dit type in het rooster."
+  };
+}
+
 async function runTool(toolId, tabId) {
   if (tabId == null) return { ok: false, error: "Geen tab." };
   var cfg = await loadConfigForBackground();
@@ -141,6 +178,35 @@ async function runTool(toolId, tabId) {
   if (!s) return { ok: false, error: "Onbekende knop: " + toolId };
 
   var ctx = buildContextForBackground(cfg, s);
+
+  // --- Coachboard: probe the roster, then jump the room tab straight to the
+  // coachboard URL. The room tab never visits the roster at all. ---
+  if (toolId === "coachboard") {
+    var probe = await probeInHiddenTab(ROSTER_URL, [
+      { type: "click", selectors: [["mat-select"]] },
+      { type: "click", selectors: [["text/Alle roosters"]] },
+      { type: "clickNearest", selectors: [["has/{{TYPE_ROSTER}}"], ["has/{{TYPE_BASE}}"]] },
+      { type: "deriveNavigate", from: "/events/(\\d+)", to: "https://lieftingfit.sportbitapp.nl/cbm/coachboard/$1/" }
+    ], ctx);
+    if (!probe.ok || !probe.navigateTo) return noClassResult(ctx);
+    await chrome.tabs.update(tabId, { url: probe.navigateTo });
+    return { ok: true, acted: 1 };
+  }
+
+  // --- Training aanpassen: confirm today's block of this type exists in the
+  // Dexos grid before the room tab leaves the dashboard. ---
+  if (toolId === "dexos") {
+    var dprobe = await probeInHiddenTab(DEXOS_URL, [
+      { type: "click", selectors: [["text/Planning"]] },
+      { type: "click", selectors: [["text/WORKOUT PROGRAMMERING"], ["has/WORKOUT PROGRAMMERING"]] },
+      { type: "change", value: "Maandoverzicht", selectors: [["selopt/Maandoverzicht"]] },
+      { type: "change", value: "{{TYPE}}", selectors: [["selopt/CrossFit"]] },
+      { type: "click", selectors: [["has/{{TODAY_DMY}}&&{{TYPE}}"]] },
+      { type: "waitForElement", selectors: [["text/Bekijk / Wijzig"], ["has/Bekijk"]] }
+    ], ctx);
+    if (!dprobe.ok) return noClassResult(ctx);
+  }
+
   if (s.macro && Array.isArray(s.macro.steps) && s.macro.steps.length) {
     return await runMacro({ startUrl: s.macro.startUrl || s.url, steps: s.macro.steps, context: ctx }, tabId);
   }
@@ -159,6 +225,7 @@ function buildContextForBackground(cfg, shortcut) {
   return {
     type: type,
     typeRoster: aliases[type] || type,
+    // NB: keep this list in sync with typeBaseOf() in app.js.
     typeBase: (function () {
       // Mirror of typeBaseOf() in app.js — a base of "The" identifies nothing.
       var first = String(type).split(/[\s(\/-]+/)[0] || "";
