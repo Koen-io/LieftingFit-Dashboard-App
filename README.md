@@ -7,6 +7,27 @@ clicking through menus and more time coaching.
 
 ![Dashboard](assets/liftingfit-black.png)
 
+---
+
+## 🌅 Koen — begin hier (ochtend-update)
+
+Terwijl je sliep heb ik de **1-klik "Training aanpassen"** gebouwd én getest. Zo probeer je hem:
+
+1. **Installeer de extensie** (eenmalig). Download deze map en laad hem in Chrome:
+   `https://github.com/Koen-io/LieftingFit-Dashboard-App/archive/refs/heads/claude/crossfit-hyrox-gym-p9cawx.zip`
+   → `chrome://extensions` → **Ontwikkelaarsmodus** aan → **Uitgepakte extensie laden** → kies de map (met `manifest.json`) → klik het 🏋️ icoon om het dashboard te openen.
+2. **Log één keer in** bij Sportbit/Dexos in diezelfde Chrome.
+3. Kies bovenaan een **lestype** (bijv. CrossFit) en klik **Training aanpassen**.
+   De helper doet nu automatisch: Planning → Workout Programmering → Maandoverzicht → lestype instellen → **de les van vandaag** aanklikken → **Bekijk / Wijzig** openen. 🎬
+
+**Werkt een stap niet?** Het dashboard laat precies zien *welke* stap misging (bijv. "Stap 6 mislukt"). Stuur me dat bericht — dan pas ik die stap aan. Kleine verschillen in de website-tekst kunnen de eerste keer roet in het eten gooien; dat is snel op te lossen.
+
+> De knoppen **Coachboard** (vandaag op de TV) en **Rooster** (week per lestype) staan klaar met de lestype-context, maar hun automatische flow moet ik nog bouwen — daarvoor heb ik dezelfde soort opname/inzage van de **Sportbit-roster** nodig als bij Dexos. Zie `docs/HANDOFF.md`.
+
+Wil je dat ik het écht zelf in de browser doe en test? Volg dan **[`LOCAL-SETUP.md`](LOCAL-SETUP.md)** — dan draai je Claude Code lokaal en bestuur ik Chrome mee.
+
+---
+
 ## What it does
 
 | Button | Opens | Notes |

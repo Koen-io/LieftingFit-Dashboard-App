@@ -456,7 +456,23 @@ kbd {
       {
         id: "dexos", label: "Training aanpassen", sub: "Dexos · Workout Programmering",
         icon: "edit", accent: "amber", cast: false, contextMode: "today",
-        url: "https://lieftingfit.sportbitapp.nl/dexos/"
+        url: "https://lieftingfit.sportbitapp.nl/dexos/",
+        // Built-in Type B flow (reverse-engineered from the Workout Programmering
+        // screen): Planning -> WORKOUT PROGRAMMERING -> Maandoverzicht + type
+        // dropdown -> today's block of that type -> Bekijk / Wijzig.
+        // {{TYPE}} follows the class-type dropdown; {{TODAY_DMY}} = ddmmyyyy.
+        macro: {
+          startUrl: "https://lieftingfit.sportbitapp.nl/dexos/",
+          steps: [
+            { type: "navigate", url: "https://lieftingfit.sportbitapp.nl/dexos/" },
+            { type: "click", selectors: [["text/Planning"]] },
+            { type: "click", selectors: [["text/WORKOUT PROGRAMMERING"], ["has/WORKOUT PROGRAMMERING"]] },
+            { type: "change", value: "Maandoverzicht", selectors: [["selopt/Maandoverzicht"]] },
+            { type: "change", value: "{{TYPE}}", selectors: [["selopt/CrossFit"]] },
+            { type: "click", selectors: [["has/{{TODAY_DMY}}&&{{TYPE}}"], ["has/{{TODAY_DMY}}"]] },
+            { type: "click", selectors: [["text/Bekijk / Wijzig"], ["has/Bekijk"]] }
+          ]
+        }
       },
       {
         id: "rooster", label: "Rooster", sub: "Sportbit · Lesrooster",
@@ -519,6 +535,7 @@ kbd {
       type: config.selectedType,
       contextMode: null, // filled per shortcut below
       todayISO: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()),
+      todayDMY: pad(d.getDate()) + pad(d.getMonth() + 1) + d.getFullYear(), // ddmmyyyy, e.g. 19072026 (Dexos block ids)
       dayOfMonth: String(d.getDate()),
       weekday: d.toLocaleDateString("nl-NL", { weekday: "long" }),
       time: pad(d.getHours()) + ":" + pad(d.getMinutes())
