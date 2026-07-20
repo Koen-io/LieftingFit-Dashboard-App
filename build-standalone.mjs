@@ -1,5 +1,9 @@
 import fs from "fs";
-const ROOT = "/home/user/LieftingFit-Dashboard-App";
+import path from "path";
+import { fileURLToPath } from "url";
+// Resolve relative to this script so the build runs from any checkout — it was
+// pinned to the cloud sandbox path, which broke every local clone.
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
 let html = fs.readFileSync(ROOT + "/index.html", "utf8");
 const css = fs.readFileSync(ROOT + "/app.css", "utf8");
 const js = fs.readFileSync(ROOT + "/app.js", "utf8");
@@ -28,7 +32,5 @@ html = html.replace('<script src="app.js"></script>', "<script>\n" + js + "\n</s
 // Prepend inline styles
 const out = "<style>\n" + css + "\n</style>\n" + html.trimStart();
 
-fs.writeFileSync("lieftingfit-dashboard-standalone.html", out);
-// also write into repo
-fs.writeFileSync(ROOT + "/lieftingfit-dashboard-standalone.html", out);
+fs.writeFileSync(path.join(ROOT, "lieftingfit-dashboard-standalone.html"), out);
 console.log("built standalone:", out.length, "bytes");

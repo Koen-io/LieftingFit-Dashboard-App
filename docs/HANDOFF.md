@@ -82,7 +82,27 @@ have **no** Coachboard option. Combined with the `setValue` bug below, a
 `{{TYPE}}` with no match casts the *wrong* class to the TV and still reports
 success.
 
-### 🐛 Open bug — `setValue` fails silently on an unmatched option
+### 🚫 Presentatie-modus can never be clicked by a macro (worked around)
+
+`Presentatie-modus` opens the Coachboard with `window.open()`, which requires
+**transient user activation**. A content script's synthetic `MouseEvent` is
+`isTrusted:false` and grants no activation, so Chrome's popup blocker silently
+drops it — verified live: a real mouse click opened the tab, an identical
+scripted click did nothing, no error.
+
+**Worked around by not clicking it.** The event id *is* the coachboard id, so the
+new `deriveNavigate` step reads the id out of the current URL and navigates the
+same tab (never popup-blocked):
+
+```
+/web/nl/events/110649  ->  /cbm/coachboard/110649/
+```
+
+Confirmed: that URL opens with Program and Class already set to the clicked
+class. **If you ever add another step that opens a new window, it will hit this
+same wall** — derive the URL instead.
+
+### 🐛 Fixed — `setValue` failed silently on an unmatched option
 
 `background.js` ~line 232:
 
@@ -92,22 +112,43 @@ el.dispatchEvent(new Event("input", { bubbles: true }));
 el.dispatchEvent(new Event("change", { bubbles: true }));
 ```
 
-When no option matches, it skips the assignment **but still fires `change`**, so
-the step "succeeds" with the previous value selected. A `change` step should fail
-loudly like a click step does. This did not bite the Dexos macro (all 41 types
-exist in `sel_eventtypeId`) but it *will* bite the Coachboard.
+When no option matches, it skipped the assignment **but still fired `change`**, so
+the step "succeeded" with the previous value selected. `setValue` now returns a
+boolean and the `change` step fails with `optie "X" bestaat niet in deze lijst`.
 
-### Still to decide / build
+### New engine steps
 
-- **Coachboard** — flow is known (above). Open question: which class when today
-  has several of `{{TYPE}}` (07:00 / 18:00 / 20:00)? Suggest nearest-upcoming.
-- **Rooster** (`contextMode: week`) — **ambiguous, needs Koen.** The original note
-  ("month view has a lesson-type selector left of the Exporteer button; we want
-  the week view") describes the **Dexos Workout Programmering** toolbar exactly —
-  `sel_overzicht` has `Weekoverzicht`/`Maandoverzicht` and sits left of
-  **Exporteer**. If so, Rooster = the `dexos` macro with `Weekoverzicht` and no
-  day-block click. The alternative reading is the Sportbit member roster week view.
-- **Kassa**: already done — plain URL `/cbm/kassa/`, no clicks.
+- **`clickNearest`** — of the elements matching a `has/` selector that also carry
+  a `HH:MM`, clicks the one starting soonest; after the last class of the day it
+  falls back to the latest. Used by Coachboard.
+
+  ⚠️ It narrows to **leaf-most** matches before comparing times. A day-column
+  wrapper contains every tile in that column, so it matches `{{TYPE}}` through a
+  child while its own first time belongs to a different class — live, the Avond
+  wrapper read `OpenGym 17:00` and would have beaten the real 18:00 CrossFit.
+  `innermost()` alone does not save you here: the container wins the *time*
+  comparison before innermost is ever applied. **Keep the leaf filter first.**
+
+- **`deriveNavigate {from, to}`** — regex the current URL, substitute `$1…`, and
+  `location.href` to the result. Waits for the SPA route change. Exists to dodge
+  the popup blocker (above).
+
+### Status
+
+| Tile | How | Verified |
+|---|---|---|
+| Training aanpassen | Dexos macro, 7 steps | ✅ live, CrossFit + Hyrox |
+| Coachboard | roster → `clickNearest` → `deriveNavigate` | ✅ live end-to-end (Hyrox 10:35 → `/cbm/coachboard/110635/`, Program Hyrox, Class 19:00 — correctly skipped the passed 09:00) |
+| Weekprogramma | Dexos macro, Weekoverzicht | ✅ live (week 30 grid, full workout text per day) |
+| Rooster | plain URL `/web/nl/events` | ✅ day view — no week toggle or type filter exists on this screen, so there is nothing to automate |
+| Kassa | plain URL `/cbm/kassa/` | ✅ unchanged |
+
+**Note:** macros only run in the **Chrome extension** (the engine lives in
+`background.js`). The standalone HTML carries the macro definitions but has no
+engine — tiles there fall back to `url`.
+
+`build-standalone.mjs` had `/home/user/...` hardcoded and could not run outside
+the cloud sandbox; it now resolves paths relative to itself.
 
 Add both macros to `DEFAULT_CONFIG`, then `node build-standalone.mjs` and push.
 

@@ -48,7 +48,31 @@
       {
         id: "coachboard", label: "Coachboard", sub: "Sportbit · Presentatie-modus",
         icon: "present", accent: "green", cast: true, contextMode: "today",
-        url: "https://lieftingfit.sportbitapp.nl/cbm/coachboard/110634/"
+        // Fallback only. A coachboard URL is per-EVENT (/cbm/coachboard/<eventId>/)
+        // and the id changes every day, so this link goes stale — the macro below
+        // is the real path. Bare /cbm/coachboard/ is just an idle splash screen.
+        url: "https://lieftingfit.sportbitapp.nl/web/nl/events",
+        // Roster (Angular SPA, day view) -> today's class of {{TYPE}} -> Coachboard.
+        //
+        // clickNearest picks the class starting soonest, because today can hold
+        // several of the same type (CrossFit runs 07:00 / 18:00 / 20:00).
+        //
+        // The last step deliberately does NOT click "Presentatie-modus": that
+        // button uses window.open(), which a synthetic click cannot trigger
+        // (popup blocker — see deriveNavigate in background.js). The event id is
+        // the same id the coachboard uses, so we navigate straight there.
+        macro: {
+          startUrl: "https://lieftingfit.sportbitapp.nl/web/nl/events",
+          steps: [
+            { type: "navigate", url: "https://lieftingfit.sportbitapp.nl/web/nl/events" },
+            { type: "clickNearest", selectors: [["has/{{TYPE}}"]] },
+            {
+              type: "deriveNavigate",
+              from: "/events/(\\d+)",
+              to: "https://lieftingfit.sportbitapp.nl/cbm/coachboard/$1/"
+            }
+          ]
+        }
       },
       {
         id: "dexos", label: "Training aanpassen", sub: "Dexos · Workout Programmering",
@@ -72,9 +96,30 @@
         }
       },
       {
-        id: "rooster", label: "Rooster", sub: "Sportbit · Lesrooster",
+        id: "weekprogramma", label: "Weekprogramma", sub: "Dexos · Weekoverzicht",
         icon: "calendar", accent: "blue", cast: false, contextMode: "week",
-        url: "https://lieftingfit.sportbitapp.nl/web/nl/login"
+        url: "https://lieftingfit.sportbitapp.nl/dexos/",
+        // Same path as Training aanpassen, but Weekoverzicht instead of
+        // Maandoverzicht and no day-block click: shows the whole week's workout
+        // content for {{TYPE}} on one screen.
+        macro: {
+          startUrl: "https://lieftingfit.sportbitapp.nl/dexos/",
+          steps: [
+            { type: "navigate", url: "https://lieftingfit.sportbitapp.nl/dexos/" },
+            { type: "click", selectors: [["text/Planning"]] },
+            { type: "click", selectors: [["text/WORKOUT PROGRAMMERING"], ["has/WORKOUT PROGRAMMERING"]] },
+            { type: "change", value: "{{TYPE}}", selectors: [["selopt/CrossFit"]] },
+            { type: "change", value: "Weekoverzicht", selectors: [["selopt/Weekoverzicht"]] }
+          ]
+        }
+      },
+      {
+        id: "rooster", label: "Rooster", sub: "Sportbit · Lesrooster (vandaag)",
+        icon: "calendar", accent: "blue", cast: false, contextMode: "today",
+        // Day view. This roster has no week toggle and no class-type filter —
+        // only a location picker — so there is nothing to automate; a plain URL
+        // is the whole feature.
+        url: "https://lieftingfit.sportbitapp.nl/web/nl/events"
       },
       {
         id: "kassa", label: "Kassa", sub: "Sportbit · Afrekenen",
