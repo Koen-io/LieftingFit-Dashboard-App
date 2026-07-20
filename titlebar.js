@@ -138,7 +138,7 @@
           // Nothing was opened because there is no such class today — the same
           // dialog the dashboard shows, so the trainer gets one consistent
           // explanation wherever they clicked.
-          if (res.noClass) { flash(""); showNoClass(res.type, t.label, res.rosterFilter); return; }
+          if (res.noClass) { flash(""); showNoClass(res.type, t.label, res.filterName); return; }
           flash(res.reason || res.error || "Mislukt", !res.soft);
         });
       });

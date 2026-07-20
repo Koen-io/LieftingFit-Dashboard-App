@@ -848,7 +848,7 @@ kbd {
         if (res.ok) { toast("✓ " + s.label + " geopend"); return; }
         // No class of this type today: nothing was opened, so explain it
         // properly in a dialog rather than a toast that slides away.
-        if (res.noClass) { showNoClass(res.type || config.selectedType, s.label, res.rosterFilter); return; }
+        if (res.noClass) { showNoClass(res.type || config.selectedType, s.label, res.filterName); return; }
         // A "soft" stop is not a breakage: the page the trainer needs is already
         // open, there just was not one obvious class to jump to. Show the hint on
         // its own — no step number, no alarm.
@@ -1422,6 +1422,14 @@ kbd {
 
   function init() {
     renderAll();
+    // Snapshot today's roster now, while the session is most likely still on
+    // "Alle roosters". That snapshot is what keeps Coachboard accurate later,
+    // even after the Rooster tile narrows the view to one zaal.
+    if (IS_EXT) {
+      try {
+        chrome.runtime.sendMessage({ action: "warmRoster" }, function () { void chrome.runtime.lastError; });
+      } catch (e) {}
+    }
     tickClock();
     setInterval(tickClock, 1000 * 15);
 

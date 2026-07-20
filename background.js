@@ -58,6 +58,15 @@ if (IS_EXTENSION) {
       });
       return true;
     }
+    if (msg.action === "warmRoster") {
+      // Snapshot today's full roster while the session is still unfiltered, so
+      // a later check made after the Rooster tile narrows the location is still
+      // accurate. Fire-and-forget.
+      getTodayEvents().then(function (d) {
+        sendResponse({ ok: !!d, complete: !!(d && d.complete) });
+      }).catch(function () { sendResponse({ ok: false }); });
+      return true;
+    }
     if (msg.action === "goDashboard") {
       goDashboard(tabId).then(sendResponse).catch(function (e) {
         sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
@@ -197,22 +206,68 @@ function findTodaysClass(events, ctx) {
   return null;
 }
 
-function noClassResult(ctx, roster) {
-  var res = {
-    ok: false,
-    noClass: true,          // the dashboard/titlebar shows a dialog for this
-    type: ctx.type,
-    reason: "Er staat vandaag geen les van dit type in het rooster."
-  };
-  // Be honest when we were only looking at one location: the class may exist
-  // in another room and simply not be visible to this check.
-  if (roster && roster.selectedRoosterId != null) {
-    var naam = "";
-    (roster.roosters || []).forEach(function (r) { if (r.id === roster.selectedRoosterId) naam = r.naam; });
-    res.rosterFilter = naam || String(roster.selectedRoosterId);
-  }
-  return res;
+/* The API only ever returns the roster LOCATION selected in the session, and
+ * the Rooster tile deliberately changes that. Rather than resetting the
+ * trainer's choice (which would undo the location they just picked), remember
+ * the complete day whenever we happen to have it.
+ *
+ * Any unfiltered read — dashboard load, or the moment before the Rooster tile
+ * switches location — snapshots today's events. A later check made while
+ * filtered then answers from that snapshot instead of guessing. The cache is
+ * keyed by date so it can never leak into tomorrow.
+ */
+var ROSTER_CACHE_KEY = "rosterCache";
+
+function todayKey() {
+  var d = new Date();
+  function p(n) { return (n < 10 ? "0" : "") + n; }
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
 }
+
+async function readRosterCache() {
+  try {
+    var v = (await chrome.storage.local.get(ROSTER_CACHE_KEY))[ROSTER_CACHE_KEY];
+    return v && v.date === todayKey() ? v : null;
+  } catch (e) { return null; }
+}
+
+async function writeRosterCache(events) {
+  try {
+    var obj = {};
+    obj[ROSTER_CACHE_KEY] = { date: todayKey(), events: events };
+    await chrome.storage.local.set(obj);
+  } catch (e) {}
+}
+
+function rosterFilterName(roster) {
+  if (!roster || roster.selectedRoosterId == null) return null;
+  var naam = "";
+  (roster.roosters || []).forEach(function (r) { if (r.id === roster.selectedRoosterId) naam = r.naam; });
+  return naam || String(roster.selectedRoosterId);
+}
+
+/* Today's events, plus whether that list is COMPLETE (covers every location).
+ * Only a complete list may be used to conclude "this class does not exist". */
+async function getTodayEvents() {
+  var live = null;
+  try { live = await fetchTodayRoster(); } catch (e) { live = null; }
+
+  if (live && live.selectedRoosterId == null) {
+    await writeRosterCache(live.events);           // full view — remember it
+    return { events: live.events, complete: true, filterName: null };
+  }
+
+  var cached = await readRosterCache();
+  if (cached) {
+    // Filtered right now, but we saw the whole day earlier — trust that.
+    return { events: cached.events, complete: true, fromCache: true, filterName: rosterFilterName(live) };
+  }
+  if (live) {
+    return { events: live.events, complete: false, filterName: rosterFilterName(live) };
+  }
+  return null;                                     // API unreachable
+}
+
 
 async function runTool(toolId, tabId) {
   if (tabId == null) return { ok: false, error: "Geen tab." };
@@ -232,27 +287,19 @@ async function runTool(toolId, tabId) {
   // and run the macro as before, so a network hiccup degrades to the old
   // behaviour rather than to a dead button.
   if (toolId === "coachboard" || toolId === "dexos") {
-    var roster = null;
-    try { roster = await fetchTodayRoster(); } catch (e) { roster = null; }
+    var day = await getTodayEvents();
 
-    if (roster) {
-      var hit = findTodaysClass(roster.events, ctx);
+    if (day) {
+      var hit = findTodaysClass(day.events, ctx);
 
-      // Nothing found — but was the answer even complete?
-      //
-      // The API returns only the roster (location) currently selected in the
-      // session, and the Rooster tile deliberately changes that selection.
-      // So after a trainer looks at "Gym - bokszaal", a CrossFit class in the
-      // main gym is invisible here. Claiming "no class today" on that basis
-      // would be a confident lie.
-      //
-      // When a filter is active we therefore treat an empty result as
-      // INCONCLUSIVE and fall through to the macro, which switches the roster
-      // to "Alle roosters" itself — self-healing: the next click is accurate
-      // and instant again. Only an unfiltered "Alle roosters" view is trusted
-      // to say the class genuinely is not there.
-      if (!hit && roster.selectedRoosterId == null) return noClassResult(ctx, roster);
-      if (!hit) hit = null;   // fall through to the macro below
+      // Only conclude "no class today" from a COMPLETE list. If we are filtered
+      // to one location and have no snapshot of the full day, an empty result
+      // means "don't know", so fall through to the macro rather than claiming
+      // the class does not exist.
+      if (!hit && day.complete) {
+        return { ok: false, noClass: true, type: ctx.type, filterName: day.filterName || null,
+                 reason: "Er staat vandaag geen les van dit type in het rooster." };
+      }
 
       // Coachboard: the event id IS the coachboard id, so the room tab goes
       // straight there — one navigation, no roster, no extra tab.
@@ -265,6 +312,14 @@ async function runTool(toolId, tabId) {
       // Dexos has no equivalent deep link, so it still replays — but only now
       // that we know the class exists.
     }
+  }
+
+  // The Rooster tile is about to narrow the session to one location, which
+  // would blind the Coachboard/Dexos check. Snapshot the full day first, so
+  // those buttons keep working afterwards without the trainer losing the
+  // location they just chose.
+  if (toolId === "rooster") {
+    try { await getTodayEvents(); } catch (e) {}
   }
 
   if (s.macro && Array.isArray(s.macro.steps) && s.macro.steps.length) {
