@@ -130,41 +130,88 @@ async function loadConfigForBackground() {
   catch (e) { return null; }
 }
 
-var ROSTER_URL = "https://lieftingfit.sportbitapp.nl/web/nl/events";
-var DEXOS_URL = "https://lieftingfit.sportbitapp.nl/dexos/";
 
-/* Check whether the class actually exists BEFORE the room tab goes anywhere.
+/* Is there a class of this type today? Answered by ASKING THE API, not by
+ * driving a page.
  *
- * Koen's requirement: if today's roster has no class of the selected type, the
- * trainer should get a message — not a Coachboard or a Dexos screen for the
- * wrong thing. Running the macro in the room tab and failing afterwards would
- * still have navigated it, leaving the TV on a stray page.
+ * The first attempt at this opened a background tab and replayed the roster
+ * macro in it. That was wrong on every count: the tab was visible in the strip,
+ * it lingered while the macro waited, and the "no class" dialog only appeared
+ * once it went away. Sportbit's own Angular front-end reads
+ * /cbm/api/web/rooster/, and the service worker can call it with the trainer's
+ * session cookie — instantly, invisibly, and with no tab at all.
  *
- * So the probe runs in a BACKGROUND tab (`active:false`) that is closed again
- * either way. The trainer's tab — the one being cast — is only touched once we
- * know there is something to show. Costs one extra page load per click.
+ * Response shape:
+ *   { events: { ochtend:[…], middag:[…], avond:[…] },
+ *     roosters: [{id,naam}], geselecteerdRoosterId }
+ * Each event: { id, start:"18:00", eind, titel:"CrossFit", type, ruimte, … }
+ * `id` is the same id the Coachboard uses: /cbm/coachboard/<id>/.
  */
-async function probeInHiddenTab(url, steps, ctx) {
-  var tab = null;
-  try {
-    tab = await chrome.tabs.create({ url: url, active: false });
-    await waitForTabComplete(tab.id, 20000);
-    var res = await inject(tab.id, steps, ctx);
-    return res || { ok: false, reason: "geen resultaat" };
-  } catch (e) {
-    return { ok: false, error: String(e && e.message ? e.message : e) };
-  } finally {
-    if (tab) { try { await chrome.tabs.remove(tab.id); } catch (e) {} }
-  }
+var ROSTER_API = "https://lieftingfit.sportbitapp.nl/cbm/api/web/rooster/";
+
+async function fetchTodayRoster() {
+  var res = await fetch(ROSTER_API, { credentials: "include" });
+  if (!res.ok) throw new Error("rooster-API gaf " + res.status);
+  var j = await res.json();
+  var out = [];
+  ["ochtend", "middag", "avond"].forEach(function (part) {
+    var list = j.events && j.events[part];
+    if (Array.isArray(list)) list.forEach(function (e) { out.push(e); });
+  });
+  return {
+    events: out,
+    // null means "Alle roosters"; anything else means we are only seeing one
+    // location and a class elsewhere would be invisible to this check.
+    selectedRoosterId: j.geselecteerdRoosterId,
+    roosters: j.roosters || []
+  };
 }
 
-function noClassResult(ctx) {
-  return {
+function normName(s) {
+  return String(s == null ? "" : s).replace(/ /g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+}
+function startMinutes(e) {
+  var m = /(\d{1,2}):(\d{2})/.exec(String(e.start || ""));
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+}
+
+/* Same rules as clickNearest, applied to data instead of DOM: the class NAME
+ * must match exactly (never a substring — "Strength" must not match "Hyrox
+ * strength"), and of those, the one starting soonest wins, falling back to the
+ * last once they have all started. */
+function findTodaysClass(events, ctx) {
+  var wanted = [ctx.typeRoster, ctx.typeBase].map(normName).filter(Boolean);
+  for (var w = 0; w < wanted.length; w++) {
+    var hits = events.filter(function (e) { return normName(e.titel) === wanted[w]; });
+    if (!hits.length) continue;
+    var now = new Date();
+    var nowMin = now.getHours() * 60 + now.getMinutes();
+    var timed = hits.map(function (e) { return { e: e, min: startMinutes(e) }; })
+                    .filter(function (x) { return x.min != null; });
+    if (!timed.length) return hits[0];
+    var upcoming = timed.filter(function (x) { return x.min >= nowMin; });
+    var pool = upcoming.length ? upcoming : timed;
+    pool.sort(function (a, b) { return upcoming.length ? a.min - b.min : b.min - a.min; });
+    return pool[0].e;
+  }
+  return null;
+}
+
+function noClassResult(ctx, roster) {
+  var res = {
     ok: false,
     noClass: true,          // the dashboard/titlebar shows a dialog for this
     type: ctx.type,
     reason: "Er staat vandaag geen les van dit type in het rooster."
   };
+  // Be honest when we were only looking at one location: the class may exist
+  // in another room and simply not be visible to this check.
+  if (roster && roster.selectedRoosterId != null) {
+    var naam = "";
+    (roster.roosters || []).forEach(function (r) { if (r.id === roster.selectedRoosterId) naam = r.naam; });
+    res.rosterFilter = naam || String(roster.selectedRoosterId);
+  }
+  return res;
 }
 
 async function runTool(toolId, tabId) {
@@ -179,32 +226,45 @@ async function runTool(toolId, tabId) {
 
   var ctx = buildContextForBackground(cfg, s);
 
-  // --- Coachboard: probe the roster, then jump the room tab straight to the
-  // coachboard URL. The room tab never visits the roster at all. ---
-  if (toolId === "coachboard") {
-    var probe = await probeInHiddenTab(ROSTER_URL, [
-      { type: "click", selectors: [["mat-select"]] },
-      { type: "click", selectors: [["text/Alle roosters"]] },
-      { type: "clickNearest", selectors: [["has/{{TYPE_ROSTER}}"], ["has/{{TYPE_BASE}}"]] },
-      { type: "deriveNavigate", from: "/events/(\\d+)", to: "https://lieftingfit.sportbitapp.nl/cbm/coachboard/$1/" }
-    ], ctx);
-    if (!probe.ok || !probe.navigateTo) return noClassResult(ctx);
-    await chrome.tabs.update(tabId, { url: probe.navigateTo });
-    return { ok: true, acted: 1 };
-  }
+  // Both class-bound buttons are gated on the same question — "is this class on
+  // today's roster?" — answered by one API call, before the room tab moves at
+  // all. If the API cannot be reached we do NOT block the trainer: fall through
+  // and run the macro as before, so a network hiccup degrades to the old
+  // behaviour rather than to a dead button.
+  if (toolId === "coachboard" || toolId === "dexos") {
+    var roster = null;
+    try { roster = await fetchTodayRoster(); } catch (e) { roster = null; }
 
-  // --- Training aanpassen: confirm today's block of this type exists in the
-  // Dexos grid before the room tab leaves the dashboard. ---
-  if (toolId === "dexos") {
-    var dprobe = await probeInHiddenTab(DEXOS_URL, [
-      { type: "click", selectors: [["text/Planning"]] },
-      { type: "click", selectors: [["text/WORKOUT PROGRAMMERING"], ["has/WORKOUT PROGRAMMERING"]] },
-      { type: "change", value: "Maandoverzicht", selectors: [["selopt/Maandoverzicht"]] },
-      { type: "change", value: "{{TYPE}}", selectors: [["selopt/CrossFit"]] },
-      { type: "click", selectors: [["has/{{TODAY_DMY}}&&{{TYPE}}"]] },
-      { type: "waitForElement", selectors: [["text/Bekijk / Wijzig"], ["has/Bekijk"]] }
-    ], ctx);
-    if (!dprobe.ok) return noClassResult(ctx);
+    if (roster) {
+      var hit = findTodaysClass(roster.events, ctx);
+
+      // Nothing found — but was the answer even complete?
+      //
+      // The API returns only the roster (location) currently selected in the
+      // session, and the Rooster tile deliberately changes that selection.
+      // So after a trainer looks at "Gym - bokszaal", a CrossFit class in the
+      // main gym is invisible here. Claiming "no class today" on that basis
+      // would be a confident lie.
+      //
+      // When a filter is active we therefore treat an empty result as
+      // INCONCLUSIVE and fall through to the macro, which switches the roster
+      // to "Alle roosters" itself — self-healing: the next click is accurate
+      // and instant again. Only an unfiltered "Alle roosters" view is trusted
+      // to say the class genuinely is not there.
+      if (!hit && roster.selectedRoosterId == null) return noClassResult(ctx, roster);
+      if (!hit) hit = null;   // fall through to the macro below
+
+      // Coachboard: the event id IS the coachboard id, so the room tab goes
+      // straight there — one navigation, no roster, no extra tab.
+      if (hit && toolId === "coachboard") {
+        await chrome.tabs.update(tabId, {
+          url: "https://lieftingfit.sportbitapp.nl/cbm/coachboard/" + hit.id + "/"
+        });
+        return { ok: true, acted: 1, klas: hit.titel, start: hit.start };
+      }
+      // Dexos has no equivalent deep link, so it still replays — but only now
+      // that we know the class exists.
+    }
   }
 
   if (s.macro && Array.isArray(s.macro.steps) && s.macro.steps.length) {

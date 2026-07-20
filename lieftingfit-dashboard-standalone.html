@@ -848,7 +848,7 @@ kbd {
         if (res.ok) { toast("✓ " + s.label + " geopend"); return; }
         // No class of this type today: nothing was opened, so explain it
         // properly in a dialog rather than a toast that slides away.
-        if (res.noClass) { showNoClass(res.type || config.selectedType, s.label); return; }
+        if (res.noClass) { showNoClass(res.type || config.selectedType, s.label, res.rosterFilter); return; }
         // A "soft" stop is not a breakage: the page the trainer needs is already
         // open, there just was not one obvious class to jump to. Show the hint on
         // its own — no step number, no alarm.
@@ -867,7 +867,7 @@ kbd {
   // Nothing was opened — say why, and make picking another type the obvious
   // next step. Deliberately a dialog, not a toast: a toast that vanishes after
   // 2.6s is the wrong shape for "the thing you asked for does not exist today".
-  function showNoClass(type, label) {
+  function showNoClass(type, label, rosterFilter) {
     var weekday = new Date().toLocaleDateString("nl-NL", { weekday: "long" });
     var body = $("#noClassBody");
     body.innerHTML =
@@ -875,6 +875,13 @@ kbd {
       '<b>' + escapeHtml(type) + '</b> in het rooster.</p>' +
       '<p class="help-text">Daarom is <b>' + escapeHtml(label) + '</b> niet geopend — je zou anders op een ' +
       'leeg of verkeerd scherm uitkomen.</p>' +
+      // Only one location was visible, so be explicit rather than implying the
+      // class does not exist anywhere.
+      (rosterFilter
+        ? '<p class="help-text help-warn">Let op: het rooster staat nu op <b>' + escapeHtml(rosterFilter) +
+          '</b>. Een les in een andere zaal is dan niet zichtbaar. Zet het rooster op ' +
+          '<b>Alle roosters</b> om alles mee te nemen.</p>'
+        : "") +
       '<p class="help-text">Kies hieronder een ander lestype en probeer het opnieuw.</p>';
 
     var pick = el("select", { "class": "type-select noclass-select", "aria-label": "Kies een ander lestype" });

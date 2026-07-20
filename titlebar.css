@@ -181,3 +181,12 @@ html.lf-has-titlebar body:has(#lf-titlebar.lf-autohide) { padding-top: 6px !impo
   background: #e2673c !important; border-color: #e2673c !important; color: #fff !important;
 }
 #lf-noclass .lf-nc-primary:hover { background: #ef7549 !important; }
+#lf-noclass .lf-nc-warn {
+  margin: 0 0 20px !important;
+  padding: 10px 12px !important;
+  border-radius: 9px !important;
+  background: rgba(226,103,60,0.12) !important;
+  border: 1px solid rgba(226,103,60,0.34) !important;
+  color: #ffc9a3 !important;
+  font-size: 13.5px !important;
+}

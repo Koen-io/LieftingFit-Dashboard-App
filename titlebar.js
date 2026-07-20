@@ -45,7 +45,7 @@
 
   // Same message as the dashboard's dialog, injected over the page. Content
   // scripts cannot reach the dashboard's DOM, so it is rebuilt here.
-  function showNoClass(type, label) {
+  function showNoClass(type, label, rosterFilter) {
     var old = document.getElementById("lf-noclass");
     if (old) old.remove();
 
@@ -72,6 +72,14 @@
     p2.textContent = "Daarom is " + (label || "deze knop") + " niet geopend. Kies op het " +
                      "dashboard een ander lestype en probeer het opnieuw.";
     box.appendChild(p2);
+
+    if (rosterFilter) {
+      var p3 = document.createElement("p");
+      p3.className = "lf-nc-warn";
+      p3.textContent = "Let op: het rooster staat op “" + rosterFilter + "”. Een les in een " +
+                       "andere zaal is dan niet zichtbaar. Zet het rooster op “Alle roosters”.";
+      box.appendChild(p3);
+    }
 
     var row = document.createElement("div");
     row.className = "lf-nc-row";
@@ -130,7 +138,7 @@
           // Nothing was opened because there is no such class today — the same
           // dialog the dashboard shows, so the trainer gets one consistent
           // explanation wherever they clicked.
-          if (res.noClass) { flash(""); showNoClass(res.type, t.label); return; }
+          if (res.noClass) { flash(""); showNoClass(res.type, t.label, res.rosterFilter); return; }
           flash(res.reason || res.error || "Mislukt", !res.soft);
         });
       });
