@@ -1,0 +1,85 @@
+/* Room-console titlebar, injected over Sportbit/Dexos.
+ *
+ * This bar is CAST TO THE TV along with the rest of the tab, so it is
+ * deliberately slim and low-contrast enough not to fight the Coachboard.
+ * Every rule is !important and namespaced: it is landing inside someone
+ * else's stylesheet (Angular Material / Dexos), which is free to be
+ * aggressive about generic selectors. */
+
+#lf-titlebar {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 2147483647 !important;   /* above Angular Material overlays */
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  box-sizing: border-box !important;
+  height: 38px !important;
+  padding: 0 10px !important;
+  background: #0b0d10 !important;
+  border-bottom: 1px solid #23282f !important;
+  font: 500 13px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  color: #e6e8ea !important;
+  transform: translateY(0);
+  transition: transform .18s ease;
+}
+
+/* Push the page down so the bar never covers the app's own header. */
+html.lf-has-titlebar body { padding-top: 38px !important; }
+
+#lf-titlebar .lf-room {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 4px 9px !important;
+  border-radius: 6px !important;
+  background: #e2673c !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+#lf-titlebar .lf-btn {
+  appearance: none !important;
+  border: 1px solid #2b3138 !important;
+  background: #14181d !important;
+  color: #e6e8ea !important;
+  padding: 5px 10px !important;
+  border-radius: 6px !important;
+  font: inherit !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  line-height: 1 !important;
+}
+#lf-titlebar .lf-btn:hover { background: #1d232a !important; border-color: #3a424b !important; }
+#lf-titlebar .lf-btn:active { transform: translateY(1px); }
+#lf-titlebar .lf-back { border-color: #3a424b !important; }
+
+#lf-titlebar .lf-sep {
+  width: 1px !important;
+  height: 18px !important;
+  background: #2b3138 !important;
+  margin: 0 4px !important;
+}
+
+#lf-titlebar .lf-status {
+  margin-left: auto !important;
+  padding-right: 4px !important;
+  color: #9aa3ad !important;
+  font-weight: 400 !important;
+  max-width: 44% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+#lf-titlebar .lf-status-bad { color: #ff8f8f !important; }
+
+/* Auto-hide: slides away, returns when the pointer reaches the top edge.
+ * The 6px lip is what makes it reachable again without a keyboard. */
+#lf-titlebar.lf-autohide { transform: translateY(-32px); }
+#lf-titlebar.lf-autohide:hover { transform: translateY(0); }
+html.lf-has-titlebar body:has(#lf-titlebar.lf-autohide) { padding-top: 6px !important; }
+
+@media print { #lf-titlebar { display: none !important; } }

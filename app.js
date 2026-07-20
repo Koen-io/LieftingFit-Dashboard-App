@@ -53,6 +53,12 @@
       "Kickboksen": "Boksen",
       "Kickboksen (daluren)": "Boksen"
     },
+    // One Chrome tab per room. Chrome casts a whole tab, so this is the only
+    // way three TVs can show different things at once.
+    rooms: ["A", "B", "C"],
+    // The titlebar is cast to the TV along with everything else; auto-hide slides
+    // it away so it does not sit over the Coachboard during a class.
+    titlebarAutoHide: false,
     shortcuts: [
       {
         id: "coachboard", label: "Coachboard", sub: "Sportbit · Presentatie-modus",
@@ -138,11 +144,35 @@
       },
       {
         id: "rooster", label: "Rooster", sub: "Sportbit · Lesrooster (vandaag)",
-        icon: "calendar", accent: "blue", cast: false, contextMode: "today",
-        // Day view. This roster has no week toggle and no class-type filter —
-        // only a location picker — so there is nothing to automate; a plain URL
-        // is the whole feature.
-        url: "https://lieftingfit.sportbitapp.nl/web/nl/events"
+        icon: "calendar", accent: "blue", cast: false,
+        // Deliberately "none": this tile does NOT follow the global class-type
+        // dropdown. It has its own roster picker below, because which room's
+        // schedule you want to see is a separate question from which class type
+        // you are coaching.
+        contextMode: "none",
+        url: "https://lieftingfit.sportbitapp.nl/web/nl/events",
+        // Mirrors the mat-select on /web/nl/events. Read live from the page on
+        // 2026-07-20; refresh with "Ververs roosters" in Settings if the gym
+        // adds a location.
+        rosterOptions: [
+          "Alle roosters",
+          "LieftingFit - De machinekamer",
+          "LieftingFit - Gym - KidsFit / TeenFit",
+          "LieftingFit - The Outdoor Project!",
+          "LieftingFit - Gym - beneden",
+          "LieftingFit - Gym - bokszaal"
+        ],
+        selectedRoster: "Alle roosters",
+        // Same click-open + click-option shape the Coachboard macro uses: it is
+        // an Angular Material mat-select, so a `change` step cannot drive it.
+        macro: {
+          startUrl: "https://lieftingfit.sportbitapp.nl/web/nl/events",
+          steps: [
+            { type: "navigate", url: "https://lieftingfit.sportbitapp.nl/web/nl/events" },
+            { type: "click", selectors: [["mat-select"]] },
+            { type: "click", selectors: [["text/{{ROSTER}}"]] }
+          ]
+        }
       },
       {
         id: "kassa", label: "Kassa", sub: "Sportbit · Afrekenen",
@@ -165,6 +195,14 @@
   }
   function saveConfig(cfg) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    mirrorConfig(cfg);
+  }
+  // The titlebar runs as a content script on sportbitapp.nl and cannot read this
+  // page's localStorage. Mirror the config into chrome.storage.local so the
+  // background can resolve a titlebar button to its macro.
+  function mirrorConfig(cfg) {
+    if (!IS_EXT) return;
+    try { chrome.storage.local.set({ config: cfg }); } catch (e) {}
   }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function normalize(cfg) {
@@ -172,15 +210,55 @@
     cfg = cfg || {};
     base.gymName = cfg.gymName || base.gymName;
     base.tvName = typeof cfg.tvName === "string" ? cfg.tvName : base.tvName;
-    if (Array.isArray(cfg.shortcuts)) base.shortcuts = cfg.shortcuts;
+    // Merge saved shortcuts with the built-in ones by id, rather than letting a
+    // saved array replace them wholesale.
+    //
+    // Without this, ANY config saved by an older build permanently shadows new
+    // built-in tiles: reloading the extension would restore the old dashboard
+    // (no Weekprogramma, no Rooster picker, the stale hardcoded Coachboard id)
+    // and no amount of updating the defaults would show through.
+    //
+    // Rule: built-ins are refreshed from DEFAULT_CONFIG but keep the user's own
+    // per-tile choices; shortcuts the user added themselves are preserved as-is.
+    if (Array.isArray(cfg.shortcuts)) {
+      var savedById = {};
+      cfg.shortcuts.forEach(function (s) { if (s && s.id) savedById[s.id] = s; });
+      var builtinIds = {};
+      base.shortcuts.forEach(function (b) {
+        builtinIds[b.id] = true;
+        var saved = savedById[b.id];
+        if (!saved) return;
+        // User-owned fields survive an upgrade; everything else (macro steps,
+        // urls, labels) comes from the new build.
+        if (typeof saved.selectedRoster === "string" && Array.isArray(b.rosterOptions)
+            && b.rosterOptions.indexOf(saved.selectedRoster) >= 0) {
+          b.selectedRoster = saved.selectedRoster;
+        }
+        if (typeof saved.accent === "string") b.accent = saved.accent;
+      });
+      cfg.shortcuts.forEach(function (s) {
+        if (s && s.id && !builtinIds[s.id]) base.shortcuts.push(s); // custom tile
+      });
+    }
     if (Array.isArray(cfg.classTypes) && cfg.classTypes.length) base.classTypes = cfg.classTypes;
     if (typeof cfg.selectedType === "string") base.selectedType = cfg.selectedType;
     if (cfg.rosterAliases && typeof cfg.rosterAliases === "object") base.rosterAliases = cfg.rosterAliases;
+    if (Array.isArray(cfg.rooms) && cfg.rooms.length) base.rooms = cfg.rooms;
+    if (typeof cfg.titlebarAutoHide === "boolean") base.titlebarAutoHide = cfg.titlebarAutoHide;
     if (base.classTypes.indexOf(base.selectedType) < 0) base.selectedType = base.classTypes[0];
     return base;
   }
 
   var config = loadConfig();
+  mirrorConfig(config); // so the titlebar works even before the first save
+
+  // Which room's tab this is. Kept in the URL rather than storage keyed by tab
+  // id: a reload, a restart, or a restored session all preserve the query
+  // string, whereas a tab id does not survive any of them.
+  var ZAAL = (function () {
+    try { return new URLSearchParams(location.search).get("zaal") || null; }
+    catch (e) { return null; }
+  })();
 
   // ----- Helpers -----
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -192,6 +270,10 @@
   }
   function openUrl(url) {
     if (!url) { toast("Geen URL ingesteld — open Instellingen"); return; }
+    // Navigate THIS tab, not a new one. The trainer cast this tab to the room's
+    // TV; a new tab would open somewhere that isn't being cast. The injected
+    // titlebar is what gets them back.
+    if (IS_EXT) { location.href = url; return; }
     window.open(url, "_blank", "noopener");
   }
   function buildContext() {
@@ -209,6 +291,7 @@
       // coarsely than Dexos does, so "Hyrox strength" / "TRX Daluren" have to
       // fall back to "Hyrox" / "TRX" to find a tile at all.
       typeBase: String(config.selectedType || "").split(/[\s(\/-]+/)[0],
+      roster: "", // filled per shortcut from its own picker (Rooster tile)
       todayISO: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()),
       todayDMY: pad(d.getDate()) + pad(d.getMonth() + 1) + d.getFullYear(), // ddmmyyyy, e.g. 19072026 (Dexos block ids)
       dayOfMonth: String(d.getDate()),
@@ -221,6 +304,7 @@
     var startUrl = (s.macro && s.macro.startUrl) || s.url;
     var ctx = buildContext();
     ctx.contextMode = s.contextMode || "none";
+    ctx.roster = s.selectedRoster || "";  // the tile's own picker, not {{TYPE}}
     toast("Bezig: " + s.label + " openen…");
     chrome.runtime.sendMessage(
       { action: "runMacro", startUrl: startUrl, steps: s.macro.steps, context: ctx },
@@ -269,8 +353,13 @@
       var hasMacro = !!(s.macro && Array.isArray(s.macro.steps) && s.macro.steps.length);
       var fallbackUrl = hasMacro ? (s.macro.startUrl || s.url) : s.url;
       var attrs = { "class": "tile acc-" + accent };
-      if (fallbackUrl) { attrs.href = fallbackUrl; attrs.target = "_blank"; attrs.rel = "noopener"; }
-      else { attrs.href = "#"; }
+      // No target=_blank inside the extension: tools must stay in this (cast)
+      // tab. The href is kept so the tile is still a real link when the page is
+      // opened as a plain web page, where there is no titlebar to come back with.
+      if (fallbackUrl) {
+        attrs.href = fallbackUrl;
+        if (!IS_EXT) { attrs.target = "_blank"; attrs.rel = "noopener"; }
+      } else { attrs.href = "#"; }
       var tile = el("a", attrs);
       var badge = "";
       if (hasMacro) badge = '<span class="tile-cast tile-macro">' + ICONS.bolt + " 1-klik dieplink</span>";
@@ -278,6 +367,7 @@
       var contextChip = "";
       if (s.contextMode === "today") contextChip = '<span class="tile-context">Vandaag · ' + escapeHtml(config.selectedType) + "</span>";
       else if (s.contextMode === "week") contextChip = '<span class="tile-context">Deze week · ' + escapeHtml(config.selectedType) + "</span>";
+      var hasRosterPicker = Array.isArray(s.rosterOptions) && s.rosterOptions.length;
       tile.innerHTML =
         '<div class="tile-top">' +
           '<span class="tile-icon">' + (ICONS[s.icon] || ICONS.link) + "</span>" +
@@ -289,13 +379,83 @@
           contextChip +
           badge +
         "</div>";
+
+      // The Rooster tile carries its own picker instead of the {{TYPE}} chip.
+      if (hasRosterPicker) {
+        var pick = el("select", { "class": "tile-roster", "aria-label": "Kies rooster" });
+        s.rosterOptions.forEach(function (name) {
+          var opt = el("option", { value: name }, escapeHtml(name));
+          if (name === s.selectedRoster) opt.selected = true;
+          pick.appendChild(opt);
+        });
+        // Stop clicks/keys reaching the tile — choosing a roster must not also
+        // fire the tile's navigation.
+        ["click", "mousedown", "keydown"].forEach(function (evt) {
+          pick.addEventListener(evt, function (e) { e.stopPropagation(); });
+        });
+        pick.addEventListener("change", function () {
+          s.selectedRoster = pick.value;
+          saveConfig(config);
+          toast("Rooster: " + pick.value);
+        });
+        tile.querySelector(".tile-body").appendChild(pick);
+      }
+
       tile.addEventListener("click", function (e) {
         if (hasMacro && IS_EXT) { e.preventDefault(); runMacro(s); return; }
         if (hasMacro && !IS_EXT) { toast("Installeer de Chrome-extensie voor de 1-klik dieplink — nu open ik de startpagina"); return; }
+        if (fallbackUrl && IS_EXT) { e.preventDefault(); openUrl(fallbackUrl); return; }
         if (!fallbackUrl) { e.preventDefault(); toast("Geen URL ingesteld — open Instellingen"); }
       });
       grid.appendChild(tile);
     });
+  }
+
+  var ROOM_ICONS = { A: "🅰", B: "🅱", C: "🅲" };
+
+  function renderZaalBar() {
+    var bar = $("#zaalBar");
+    if (!bar) return;
+    // Only meaningful inside the extension: opening/focusing a per-room tab
+    // needs chrome.tabs, which a plain web page does not have.
+    if (!IS_EXT) { bar.hidden = true; return; }
+    bar.hidden = false;
+    bar.innerHTML = "";
+
+    var label = el("div", { "class": "zaal-label" }, "Zaal");
+    bar.appendChild(label);
+
+    (config.rooms || []).forEach(function (z) {
+      var b = el("button", {
+        "class": "zaal-btn" + (z === ZAAL ? " is-current" : ""),
+        "type": "button",
+        "title": z === ZAAL ? "Dit is de tab van Zaal " + z : "Open of ga naar de tab van Zaal " + z
+      });
+      b.innerHTML = '<span class="zaal-ico">' + (ROOM_ICONS[z] || "▪") + '</span>' +
+                    '<span class="zaal-name">Zaal ' + escapeHtml(z) + '</span>';
+      b.addEventListener("click", function () {
+        chrome.runtime.sendMessage({ action: "openRoom", zaal: z }, function (res) {
+          if (chrome.runtime.lastError) { toast("Kon de helper niet starten"); return; }
+          if (!res || !res.ok) { toast((res && res.error) || "Kon Zaal " + z + " niet openen"); return; }
+          toast(res.reused ? "Zaal " + z + " naar voren gehaald" : "Zaal " + z + " geopend — cast deze tab één keer naar de TV");
+        });
+      });
+      bar.appendChild(b);
+    });
+
+    var hint = el("div", { "class": "zaal-hint" },
+      ZAAL
+        ? "Deze tab is <b>Zaal " + escapeHtml(ZAAL) + "</b>. Cast hem één keer; alles wat je hierna opent blijft op die TV."
+        : "Kies een zaal — elke zaal krijgt een eigen tab die je één keer naar zijn TV cast.");
+    bar.appendChild(hint);
+  }
+
+  function renderRoomBadge() {
+    var badge = $("#roomBadge");
+    if (!badge) return;
+    if (!ZAAL) { badge.hidden = true; return; }
+    badge.hidden = false;
+    badge.textContent = (ROOM_ICONS[ZAAL] || "▪") + " Zaal " + ZAAL;
   }
 
   function renderTypeSelect() {
@@ -347,6 +507,30 @@
     gen.appendChild(fieldInput("Naam sportschool", "gymName", config.gymName));
     gen.appendChild(fieldInput("Naam TV / Chromecast (optioneel)", "tvName", config.tvName));
     body.appendChild(gen);
+
+    // Rooms
+    var rm = el("div", { "class": "set-section" }, "<h3>Zalen</h3>");
+    rm.appendChild(el("p", { "class": "help-text" },
+      "Eén zaal per regel. Elke zaal krijgt een eigen Chrome-tab die je één keer " +
+      "naar de TV van die zaal cast — Chrome cast een hele tab, dus meerdere TV's " +
+      "met verschillende beelden kan alleen zó."));
+    var rta = el("textarea", { "class": "types-textarea", rows: "3", spellcheck: "false" });
+    rta.value = (config.rooms || []).join("\n");
+    rta.addEventListener("input", function () {
+      config.rooms = rta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+    });
+    rm.appendChild(rta);
+
+    var ahWrap = el("label", { "class": "set-check" });
+    var ah = el("input", { type: "checkbox" });
+    ah.checked = !!config.titlebarAutoHide;
+    ah.addEventListener("change", function () { config.titlebarAutoHide = ah.checked; });
+    ahWrap.appendChild(ah);
+    ahWrap.appendChild(el("span", null,
+      "Menubalk automatisch verbergen (schuift weg; kom met de muis naar de bovenrand). " +
+      "De balk staat óók op de TV, dus dit houdt het Coachboard vrij."));
+    rm.appendChild(ahWrap);
+    body.appendChild(rm);
 
     // Shortcuts
     var sc = el("div", { "class": "set-section" }, "<h3>Snelkoppelingen</h3>");
@@ -573,6 +757,8 @@
   // ----- Wire up -----
   function renderAll() {
     renderBindings();
+    renderZaalBar();
+    renderRoomBadge();
     renderTypeSelect();
     renderTiles();
   }

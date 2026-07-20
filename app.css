@@ -176,6 +176,70 @@ body {
 .lesson-select:focus { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
 /* ---------- Context bar (active class type) ---------- */
+/* ----- Zaal (room) tabs -----
+   Each room is a separate CHROME TAB, not an in-page tab: Chrome casts a whole
+   tab, so independent per-TV output is only possible one tab per room. These
+   buttons open or focus that tab. */
+.zaal-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: clamp(12px, 1.4vw, 18px) clamp(18px, 2vw, 26px);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: linear-gradient(160deg, var(--panel), var(--bg-2));
+}
+.zaal-label { color: var(--text); font-weight: 700; font-size: clamp(14px, 1.5vw, 17px); margin-right: 4px; }
+.zaal-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 16px; font-weight: 800; letter-spacing: 0.01em;
+  cursor: pointer;
+}
+.zaal-btn:hover { border-color: var(--accent, #e2673c); background: rgba(255,255,255,0.05); }
+.zaal-btn .zaal-ico { font-size: 19px; line-height: 1; }
+/* The room this tab already is — pressed-in, so it reads as state not action. */
+.zaal-btn.is-current {
+  border-color: #e2673c;
+  background: rgba(226,103,60,0.16);
+  box-shadow: inset 0 0 0 1px rgba(226,103,60,0.35);
+}
+.zaal-hint { color: var(--muted); font-size: 13px; margin-left: auto; max-width: 46ch; }
+.zaal-hint b { color: var(--text); }
+
+/* Room badge in the header — the at-a-glance "which TV am I driving". */
+.room-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; margin-right: 6px;
+  border-radius: 9px;
+  background: #e2673c; color: #fff;
+  font-weight: 800; font-size: 14px; white-space: nowrap;
+}
+
+/* The Rooster tile's own picker. Deliberately NOT tied to the class-type
+   dropdown: which room's schedule you want is a separate question from which
+   class you are coaching. */
+.tile-roster {
+  appearance: none;
+  display: block; width: 100%; margin-top: 12px;
+  padding: 9px 34px 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2397a1b0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 11px center;
+  color: var(--text);
+  font-size: 13px; font-weight: 700;
+  cursor: pointer;
+}
+.tile-roster:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+.set-check {
+  display: flex; align-items: flex-start; gap: 10px; margin-top: 12px;
+  color: var(--muted); font-size: 13px; line-height: 1.45; cursor: pointer;
+}
+.set-check input { margin-top: 2px; flex: none; width: 16px; height: 16px; cursor: pointer; }
+
 .context-bar {
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
   padding: clamp(14px, 1.6vw, 20px) clamp(18px, 2vw, 26px);

@@ -19,26 +19,174 @@ if (IS_EXTENSION) {
     chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
   });
 
+  // Forget a room's tab when it is closed, so the next click opens a fresh one
+  // instead of trying to focus a dead tab id.
+  chrome.tabs.onRemoved.addListener(function (tabId) {
+    getRooms().then(function (rooms) {
+      var changed = false;
+      Object.keys(rooms).forEach(function (z) { if (rooms[z] === tabId) { delete rooms[z]; changed = true; } });
+      if (changed) setRooms(rooms);
+    });
+  });
+
   chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
-    if (msg && msg.action === "runMacro") {
-      runMacro(msg).then(sendResponse).catch(function (e) {
+    if (!msg || !msg.action) return false;
+    var tabId = sender && sender.tab ? sender.tab.id : null;
+
+    if (msg.action === "runMacro") {
+      // Runs in the SENDER's tab — see runMacro().
+      runMacro(msg, tabId).then(sendResponse).catch(function (e) {
         sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
       });
       return true; // keep the message channel open for the async response
+    }
+    if (msg.action === "openRoom") {
+      openRoom(msg.zaal).then(sendResponse).catch(function (e) {
+        sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
+      });
+      return true;
+    }
+    if (msg.action === "whoAmI") {
+      // The titlebar content script cannot know its own room; only the
+      // background holds the tab -> room mapping.
+      roomForTab(tabId).then(function (zaal) { sendResponse({ zaal: zaal }); });
+      return true;
+    }
+    if (msg.action === "runTool") {
+      runTool(msg.tool, tabId).then(sendResponse).catch(function (e) {
+        sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
+      });
+      return true;
+    }
+    if (msg.action === "goDashboard") {
+      goDashboard(tabId).then(sendResponse).catch(function (e) {
+        sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
+      });
+      return true;
     }
     return false;
   });
 }
 
-async function runMacro(msg) {
+/* ---------------- Room tabs ----------------
+ * Chrome casts a whole TAB, so three TVs showing different things need three
+ * separate tabs, each cast once. The mapping lives in storage.session (not a
+ * module variable) because an MV3 service worker is torn down when idle and
+ * would otherwise forget which tab belongs to which room.
+ */
+async function getRooms() {
+  try { return (await chrome.storage.session.get("rooms")).rooms || {}; }
+  catch (e) { return {}; }
+}
+async function setRooms(rooms) {
+  try { await chrome.storage.session.set({ rooms: rooms }); } catch (e) {}
+}
+async function roomForTab(tabId) {
+  if (tabId == null) return null;
+  var rooms = await getRooms();
+  var found = null;
+  Object.keys(rooms).forEach(function (z) { if (rooms[z] === tabId) found = z; });
+  return found;
+}
+
+function dashboardUrl(zaal) {
+  return chrome.runtime.getURL("index.html") + (zaal ? "?zaal=" + encodeURIComponent(zaal) : "");
+}
+
+// Focus this room's tab if it still exists, otherwise open one. Re-using the
+// tab is what makes casting stick: the trainer casts it once and every later
+// navigation inside it stays on that TV.
+async function openRoom(zaal) {
+  if (!zaal) return { ok: false, error: "Geen zaal opgegeven." };
+  var rooms = await getRooms();
+  var existing = rooms[zaal];
+  if (existing != null) {
+    try {
+      await chrome.tabs.get(existing);           // throws if the tab is gone
+      await chrome.tabs.update(existing, { active: true });
+      var t = await chrome.tabs.get(existing);
+      try { await chrome.windows.update(t.windowId, { focused: true }); } catch (e) {}
+      return { ok: true, tabId: existing, reused: true };
+    } catch (e) { /* fall through and open a new one */ }
+  }
+  var tab = await chrome.tabs.create({ url: dashboardUrl(zaal), active: true });
+  rooms[zaal] = tab.id;
+  await setRooms(rooms);
+  return { ok: true, tabId: tab.id, reused: false };
+}
+
+async function goDashboard(tabId) {
+  if (tabId == null) return { ok: false, error: "Geen tab." };
+  var zaal = await roomForTab(tabId);
+  await chrome.tabs.update(tabId, { url: dashboardUrl(zaal) });
+  return { ok: true };
+}
+
+/* The titlebar lives in a content script, which has no access to the dashboard
+ * page's localStorage. app.js mirrors its config into chrome.storage.local so
+ * the background can resolve a tool id to its macro on the titlebar's behalf. */
+async function loadConfigForBackground() {
+  try { return (await chrome.storage.local.get("config")).config || null; }
+  catch (e) { return null; }
+}
+
+async function runTool(toolId, tabId) {
+  if (tabId == null) return { ok: false, error: "Geen tab." };
+  var cfg = await loadConfigForBackground();
+  if (!cfg || !Array.isArray(cfg.shortcuts)) {
+    return { ok: false, error: "Config nog niet geladen — open eerst het dashboard." };
+  }
+  var s = null;
+  cfg.shortcuts.forEach(function (x) { if (x.id === toolId) s = x; });
+  if (!s) return { ok: false, error: "Onbekende knop: " + toolId };
+
+  var ctx = buildContextForBackground(cfg, s);
+  if (s.macro && Array.isArray(s.macro.steps) && s.macro.steps.length) {
+    return await runMacro({ startUrl: s.macro.startUrl || s.url, steps: s.macro.steps, context: ctx }, tabId);
+  }
+  if (!s.url) return { ok: false, error: "Geen URL voor " + toolId };
+  await chrome.tabs.update(tabId, { url: s.url });
+  return { ok: true, acted: 0 };
+}
+
+// Mirror of app.js buildContext(), for tool runs started from the titlebar
+// (where the dashboard page isn't there to build it).
+function buildContextForBackground(cfg, shortcut) {
+  var d = new Date();
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  var type = cfg.selectedType || "";
+  var aliases = cfg.rosterAliases || {};
+  return {
+    type: type,
+    typeRoster: aliases[type] || type,
+    typeBase: String(type).split(/[\s(\/-]+/)[0],
+    roster: (shortcut && shortcut.selectedRoster) || "",
+    todayISO: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()),
+    todayDMY: pad(d.getDate()) + pad(d.getMonth() + 1) + d.getFullYear(),
+    dayOfMonth: String(d.getDate()),
+    weekday: d.toLocaleDateString("nl-NL", { weekday: "long" }),
+    time: pad(d.getHours()) + ":" + pad(d.getMinutes())
+  };
+}
+
+/* Runs the macro in the CALLING tab rather than a new one. The whole point of
+ * the room model: the trainer cast this tab to the room's TV, so every tool has
+ * to land here. Opening a new tab would put the tool on an uncast tab. */
+async function runMacro(msg, tabId) {
   var startUrl = msg.startUrl;
   var steps = Array.isArray(msg.steps) ? msg.steps : [];
   if (!startUrl) return { ok: false, error: "Geen start-URL voor deze macro." };
+  if (tabId == null) {
+    // No sender tab (e.g. invoked from a context without one) — fall back to a
+    // new tab so the action still works, just without the casting guarantee.
+    var fresh = await chrome.tabs.create({ url: startUrl, active: true });
+    tabId = fresh.id;
+  } else {
+    await chrome.tabs.update(tabId, { url: startUrl });
+  }
+  await waitForTabComplete(tabId, 20000);
 
-  var tab = await chrome.tabs.create({ url: startUrl, active: true });
-  await waitForTabComplete(tab.id, 20000);
-
-  var res = await inject(tab.id, steps, msg.context || {});
+  var res = await inject(tabId, steps, msg.context || {});
 
   // A step may hand back a URL instead of navigating itself (deriveNavigate).
   // It has to: assigning location.href inside the injected function destroys
@@ -49,10 +197,10 @@ async function runMacro(msg) {
   while (res && res.ok && res.navigateTo && hops++ < 5) {
     var acted = res.acted || 0;
     var remaining = res.remaining || [];
-    await chrome.tabs.update(tab.id, { url: res.navigateTo });
-    await waitForTabComplete(tab.id, 20000);
+    await chrome.tabs.update(tabId, { url: res.navigateTo });
+    await waitForTabComplete(tabId, 20000);
     if (!remaining.length) return { ok: true, acted: acted };
-    res = await inject(tab.id, remaining, msg.context || {});
+    res = await inject(tabId, remaining, msg.context || {});
     if (res) res.acted = (res.acted || 0) + acted;
   }
   return res || { ok: false, error: "Geen resultaat van de pagina." };
@@ -110,6 +258,8 @@ function replayInPage(steps, context) {
         // these placeholders existed still substitute to something usable.
         .replace(/\{\{TYPE_ROSTER\}\}/g, context.typeRoster || context.type || "")
         .replace(/\{\{TYPE_BASE\}\}/g, context.typeBase || context.type || "")
+        // The Rooster tile's own picker — independent of the class-type dropdown.
+        .replace(/\{\{ROSTER\}\}/g, context.roster || "")
         .replace(/\{\{TYPE\}\}/g, context.type || "")
         .replace(/\{\{TODAY_ISO\}\}/g, context.todayISO || "")
         .replace(/\{\{TODAY_DMY\}\}/g, context.todayDMY || "")

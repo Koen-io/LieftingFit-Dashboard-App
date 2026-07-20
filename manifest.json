@@ -13,6 +13,15 @@
     "https://lieftingfit.sportbitapp.nl/*",
     "https://*.sportbitapp.nl/*"
   ],
+  "content_scripts": [
+    {
+      "matches": ["https://*.sportbitapp.nl/*"],
+      "js": ["titlebar.js"],
+      "css": ["titlebar.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
   "icons": {
     "16": "assets/favicon-64.png",
     "48": "assets/icon-192.png",
