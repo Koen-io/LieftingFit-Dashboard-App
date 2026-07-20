@@ -4,44 +4,109 @@ State of the LieftingFit trainer dashboard + Chrome Helper, and what's left.
 
 ## ▶ CONTINUE HERE (local session) — read this first
 
-Koen is switching to a **local Claude Code session** (see `LOCAL-SETUP.md`) so a
-browser tool (Playwright MCP) can drive Chrome and inspect the real Sportbit /
-Dexos pages. Pick up exactly here:
+**Dexos macro: VERIFIED on the live site (2026-07-20, local session).** All 7
+steps of `Training aanpassen` were resolved against the real DOM for **both
+CrossFit and Hyrox**, using a faithful in-page copy of the `background.js`
+resolver. Details in "Verified selectors" below. Remaining work is Coachboard +
+Rooster.
 
-**Live status:** the extension installs and runs. Koen tested **Training
-aanpassen** on the real site and it failed at **Step 3 = the "WORKOUT
-PROGRAMMERING" tab click** ("Stap 3 mislukt"). Working theory: that tab's label
-is uppercased by CSS, so the real DOM text is `Workout Programmering` and the old
-exact match missed it.
+### Verified selectors (live DOM, 2026-07-20)
 
-**Already applied (verify, don't assume):** `background.js` now matches text
-**case-insensitively + whitespace-normalized** via a `norm()` helper (used by
-`text/`, `has/`, `aria/`, `selopt/`, and `<select>` option matching). This was
-NOT verified against the real site (the cloud mock got corrupted during testing).
-**First job: confirm the Dexos macro end-to-end on the real page** and fix
-whatever step still fails (the toast/`runMacro` reports the exact failed step).
+| Step | Selector | Resolves to |
+|---|---|---|
+| 2 | `text/Planning` | `SPAN` "Planning" (left menu) |
+| 3 | `text/WORKOUT PROGRAMMERING` | `A` → `dexos.openModule(13, 13, whiteboard.initProgramSearch, {'custom_id':3,'view':'overzicht'}, 16)` |
+| 4 | `selopt/Maandoverzicht` | `select#sel_overzicht` (2 opts: Weekoverzicht, Maandoverzicht) |
+| 5 | `selopt/CrossFit` | `select#sel_eventtypeId` (41 opts) |
+| 6 | `has/{{TODAY_DMY}}&&{{TYPE}}` | `div.m-program` → `whiteboard.selecteerProgrammering(<id>)` |
+| 7 | `text/Bekijk / Wijzig` | `BUTTON` → `whiteboard.openGeselecteerdeProgrammering(<id>)` |
 
-**Fast iteration loop (local):**
-1. Open `https://lieftingfit.sportbitapp.nl/dexos/` via the browser tool; Koen
-   logs in once.
-2. Planning → Workout Programmering. Inspect the REAL DOM for:
-   - the **WORKOUT PROGRAMMERING** tab element + its true text/case,
-   - the **view** and **type** controls — confirm they're real `<select>`s (if
-     custom dropdowns, swap the two `change` steps for click-open + click-option),
-   - a **day block** (how the date/type are encoded — should contain `ddmmyyyy`),
-   - the **Bekijk / Wijzig** button label (exact text).
-3. Adjust the `dexos` macro in `app.js` → `DEFAULT_CONFIG.shortcuts` and reload
-   the unpacked extension (or just drive the flow directly to validate selectors).
+**Why step 3 failed, precisely:** the real DOM text is `Workout programmering` —
+**sentence case** (lowercase `p`), not the `Workout Programmering` title case the
+cloud session guessed. CSS `text-transform: uppercase` renders it as
+`WORKOUT PROGRAMMERING`. The `norm()` fix handles it; the old exact match did not.
 
-**Then build the two remaining macros** (Koen's original descriptions):
-- **Coachboard** (`contextMode: today`, casts to TV): Sportbit roster → click
-  **today's class block of `{{TYPE}}`** → the **Presentatie-modus** button →
-  opens the Coachboard (`/cbm/coachboard/<id>/`; example id 110634). Roster/login
-  at `/web/nl/login`. Find the logged-in roster URL + the type filter + how a
-  block maps to its Presentatie-modus button.
-- **Rooster** (`contextMode: week`): Sportbit roster, **week** view of `{{TYPE}}`.
-  Original note: month view has a lesson-type selector **left of the Exporteer
-  button**; here we want the week view for the selected type.
+**Second bug the `norm()` fix silently fixed (step 6, Hyrox only):** Hyrox day
+blocks have DOM text `HYROX 20072026` — **genuinely uppercase in the data**, with
+`text-transform: none`. The type dropdown supplies `Hyrox`. So case-sensitive
+`has/` would have failed for *every* Hyrox class. CrossFit blocks are title case
+(`CrossFit Warm Up 20072026`), which is why this never showed up in testing.
+
+**Both toolbar controls are real native `<select>`s** — no custom-dropdown
+rewrite needed. The `change` steps work as written.
+
+**Prefix collisions in the 41 types** — `CrossFit` / `Crossfit Daluren` /
+`CrossFit open`, and `Hyrox` / `Hyrox daluren` / `Hyrox strength`. Safe because
+the `change` handler tries **exact match before substring** (`background.js`
+~line 230). Verified: selecting `Hyrox` picks index 16 `Hyrox`, not `Hyrox
+daluren`. **Do not reorder those two loops.**
+
+Residual edge case (not hit today): on a day with both `HYROX 20072026` and
+`HYROX Long 20072026`, `has/20072026&&Hyrox` matches both and `innermost()` picks
+one arbitrarily. Only matters if you need Long specifically.
+
+### Coachboard — flow mapped live (2026-07-20)
+
+**The roster is an Angular SPA.** `/cbm/` redirects to `/web/nl/events` (already
+authenticated). Class tiles are `app-event-tile > div.calendar-card`
+(`cursor:pointer`, **no `href`/`onclick`** — Angular event binding). A real click
+works, and because the handler sits on an ancestor, clicking the inner `has/`
+match bubbles up correctly.
+
+**The event id IS the coachboard id.** Clicking a tile goes to
+`/web/nl/events/110634`; Presentatie-modus opens `/cbm/coachboard/110634/`.
+(110634 is the id currently hardcoded in `app.js` — it is *today's 07:00
+CrossFit*, so **the hardcoded Coachboard URL silently goes stale every day**.)
+
+**`Presentatie-modus` only exists on the event detail page**, not on the roster.
+It is an `A` (no href) in `div.header__top__nav`; `text/Presentatie-modus`
+resolves cleanly. **It opens a NEW TAB** — relevant to `runMacro`, which drives a
+single tab. Fine as a terminal step; nothing can follow it in the same macro.
+
+**`/cbm/coachboard/` with no id** loads a branded idle splash with **no toolbar
+and no selectors** — not usable as a generic entry point. An event id is
+required, so the roster → tile → Presentatie-modus path is unavoidable.
+
+**The Coachboard has its own toolbar** — three native `<select>`s plus
+`button#fullscreen-btn` → `coachboard.openFullscreen()`:
+
+| Control | id | Options |
+|---|---|---|
+| Program | `sel_programma` | **12 groups**: CrossFit, Fitness, OpenGym, Hyrox, Daluren, Specialty class 60+/Calisthenics/TRX/Yoga, The Outdoor Project, brazilian jiu jitsu, + one blank |
+| Class | `sel_les` | today's start times for that program (e.g. 07:00, 18:00, 20:00) |
+| View | *(none)* | Coachboard, WOD presentation |
+
+⚠️ **12-vs-41 mismatch.** `sel_programma` is a coarser grouping than the
+dashboard's 41 class types. `Hyrox strength`, `Booty`, `Kettlebell Training` etc.
+have **no** Coachboard option. Combined with the `setValue` bug below, a
+`{{TYPE}}` with no match casts the *wrong* class to the TV and still reports
+success.
+
+### 🐛 Open bug — `setValue` fails silently on an unmatched option
+
+`background.js` ~line 232:
+
+```js
+if (idx >= 0) el.selectedIndex = idx;
+el.dispatchEvent(new Event("input", { bubbles: true }));
+el.dispatchEvent(new Event("change", { bubbles: true }));
+```
+
+When no option matches, it skips the assignment **but still fires `change`**, so
+the step "succeeds" with the previous value selected. A `change` step should fail
+loudly like a click step does. This did not bite the Dexos macro (all 41 types
+exist in `sel_eventtypeId`) but it *will* bite the Coachboard.
+
+### Still to decide / build
+
+- **Coachboard** — flow is known (above). Open question: which class when today
+  has several of `{{TYPE}}` (07:00 / 18:00 / 20:00)? Suggest nearest-upcoming.
+- **Rooster** (`contextMode: week`) — **ambiguous, needs Koen.** The original note
+  ("month view has a lesson-type selector left of the Exporteer button; we want
+  the week view") describes the **Dexos Workout Programmering** toolbar exactly —
+  `sel_overzicht` has `Weekoverzicht`/`Maandoverzicht` and sits left of
+  **Exporteer**. If so, Rooster = the `dexos` macro with `Weekoverzicht` and no
+  day-block click. The alternative reading is the Sportbit member roster week view.
 - **Kassa**: already done — plain URL `/cbm/kassa/`, no clicks.
 
 Add both macros to `DEFAULT_CONFIG`, then `node build-standalone.mjs` and push.
