@@ -2,6 +2,58 @@
 
 State of the LieftingFit trainer dashboard + Chrome Helper, and what's left.
 
+## ▶ CONTINUE HERE (local session) — read this first
+
+Koen is switching to a **local Claude Code session** (see `LOCAL-SETUP.md`) so a
+browser tool (Playwright MCP) can drive Chrome and inspect the real Sportbit /
+Dexos pages. Pick up exactly here:
+
+**Live status:** the extension installs and runs. Koen tested **Training
+aanpassen** on the real site and it failed at **Step 3 = the "WORKOUT
+PROGRAMMERING" tab click** ("Stap 3 mislukt"). Working theory: that tab's label
+is uppercased by CSS, so the real DOM text is `Workout Programmering` and the old
+exact match missed it.
+
+**Already applied (verify, don't assume):** `background.js` now matches text
+**case-insensitively + whitespace-normalized** via a `norm()` helper (used by
+`text/`, `has/`, `aria/`, `selopt/`, and `<select>` option matching). This was
+NOT verified against the real site (the cloud mock got corrupted during testing).
+**First job: confirm the Dexos macro end-to-end on the real page** and fix
+whatever step still fails (the toast/`runMacro` reports the exact failed step).
+
+**Fast iteration loop (local):**
+1. Open `https://lieftingfit.sportbitapp.nl/dexos/` via the browser tool; Koen
+   logs in once.
+2. Planning → Workout Programmering. Inspect the REAL DOM for:
+   - the **WORKOUT PROGRAMMERING** tab element + its true text/case,
+   - the **view** and **type** controls — confirm they're real `<select>`s (if
+     custom dropdowns, swap the two `change` steps for click-open + click-option),
+   - a **day block** (how the date/type are encoded — should contain `ddmmyyyy`),
+   - the **Bekijk / Wijzig** button label (exact text).
+3. Adjust the `dexos` macro in `app.js` → `DEFAULT_CONFIG.shortcuts` and reload
+   the unpacked extension (or just drive the flow directly to validate selectors).
+
+**Then build the two remaining macros** (Koen's original descriptions):
+- **Coachboard** (`contextMode: today`, casts to TV): Sportbit roster → click
+  **today's class block of `{{TYPE}}`** → the **Presentatie-modus** button →
+  opens the Coachboard (`/cbm/coachboard/<id>/`; example id 110634). Roster/login
+  at `/web/nl/login`. Find the logged-in roster URL + the type filter + how a
+  block maps to its Presentatie-modus button.
+- **Rooster** (`contextMode: week`): Sportbit roster, **week** view of `{{TYPE}}`.
+  Original note: month view has a lesson-type selector **left of the Exporteer
+  button**; here we want the week view for the selected type.
+- **Kassa**: already done — plain URL `/cbm/kassa/`, no clicks.
+
+Add both macros to `DEFAULT_CONFIG`, then `node build-standalone.mjs` and push.
+
+Selector tokens available in the engine: `text/`, `has/` (`a&&b` = all present),
+`selopt/` (a `<select>` by an option's text), `aria/`, `xpath/`, `pierce/`, CSS.
+Context placeholders: `{{TYPE}}`, `{{TODAY_ISO}}`, `{{TODAY_DMY}}` (ddmmyyyy),
+`{{TODAY_D}}`, `{{TIME}}`, `{{WEEKDAY}}`.
+
+Note: the cloud `scratchpad/` (uploaded Dexos HTML/video + test mocks) is NOT in
+the repo. Re-derive mocks locally, or better, validate against the live site.
+
 ## What works
 
 - **Dashboard** (`index.html` / `app.css` / `app.js`): branded, dark, fullscreen,
