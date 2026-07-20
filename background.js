@@ -106,8 +106,9 @@ function replayInPage(steps, context) {
     function subst(str) {
       if (typeof str !== "string") return str;
       return str
-        // Falls back to the full type when typeBase is absent, so older saved
-        // configs (which have no typeBase) still substitute to something usable.
+        // Both fall back to the full type when absent, so configs saved before
+        // these placeholders existed still substitute to something usable.
+        .replace(/\{\{TYPE_ROSTER\}\}/g, context.typeRoster || context.type || "")
         .replace(/\{\{TYPE_BASE\}\}/g, context.typeBase || context.type || "")
         .replace(/\{\{TYPE\}\}/g, context.type || "")
         .replace(/\{\{TODAY_ISO\}\}/g, context.todayISO || "")
@@ -296,6 +297,15 @@ function replayInPage(steps, context) {
       var nowMin = now.getHours() * 60 + now.getMinutes();
       var pool = [];
 
+      // A roster tile reads "<class name><start time>…", e.g. "Boksen19:00 - 20:00".
+      // Capturing the leading name lets us prefer an EXACT class match over a
+      // mere substring hit, which matters because class names nest:
+      // "Boksen" ⊂ "Kickboksen" ⊂ "TeenFit kickboksen", and "Hyrox" ⊂ "Hyrox
+      // strength". Without this, asking for Boksen at 17:00 would open the
+      // 18:00 TeenFit kickboksen rather than the 19:00 adult class.
+      var LEAD_RE = /^(.+?)(\d{1,2}):(\d{2})/;
+      var activeNeedles = null;
+
       for (var c = 0; c < cands.length; c++) {
         var sel = cands[c];
         if (sel.indexOf("has/") !== 0) continue;
@@ -308,9 +318,14 @@ function replayInPage(steps, context) {
           if (!ok || !visible(nodes[i])) continue;
           var m = TIME_RE.exec(nodes[i].textContent);
           if (!m) continue; // the bare label span carries no time — skip it
-          pool.push({ el: nodes[i], min: parseInt(m[1], 10) * 60 + parseInt(m[2], 10) });
+          var lead = LEAD_RE.exec(nodes[i].textContent.replace(/\s+/g, " ").trim());
+          pool.push({
+            el: nodes[i],
+            min: parseInt(m[1], 10) * 60 + parseInt(m[2], 10),
+            lead: lead ? norm(lead[1]) : null
+          });
         }
-        if (pool.length) break; // first candidate selector that matched wins
+        if (pool.length) { activeNeedles = needles; break; } // first matching selector wins
       }
       if (!pool.length) return null;
 
@@ -324,6 +339,14 @@ function replayInPage(steps, context) {
         return !pool.some(function (q) { return q.el !== p.el && p.el.contains(q.el); });
       });
       if (leaves.length) pool = leaves;
+
+      // Prefer tiles whose class name IS the requested one over tiles that
+      // merely contain it. Only meaningful for a single-needle selector; a
+      // date+type selector (the Dexos grid) has no leading-name shape.
+      if (activeNeedles && activeNeedles.length === 1) {
+        var exact = pool.filter(function (p) { return p.lead && p.lead === activeNeedles[0]; });
+        if (exact.length) pool = exact;
+      }
 
       var upcoming = pool.filter(function (p) { return p.min >= nowMin; });
       var best = upcoming.length

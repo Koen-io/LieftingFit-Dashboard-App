@@ -109,18 +109,37 @@ The macro therefore opens with click-open + click-option on the location picker
 coarsely. Hence the `{{TYPE_BASE}}` fallback (first word of the type) as a second
 candidate selector. Verified live against today's roster:
 
-| Dashboard type | Roster tile | Resolves? |
-|---|---|---|
-| `Hyrox strength` | `HYROX` | ✅ via TYPE_BASE |
-| `TRX Daluren` | `Trx` | ✅ via TYPE_BASE |
-| `Crossfit Daluren` | `CrossFit` | ✅ via TYPE_BASE |
-| `Yoga` | `Yoga` | ✅ direct |
-| `Kickboksen` | `Boksen` | ❌ dashboard name is *longer*; first-word fallback cannot help |
-| `Booty` | *(absent)* | ❌ not on Monday's roster |
+Resolution order is `{{TYPE_ROSTER}}` (alias, else the Dexos name) then
+`{{TYPE_BASE}}` (first word):
 
-**Open question for Koen:** is roster `Boksen` the same class as Dexos
-`Kickboksen`? If so an explicit alias map is the fix. And does `Booty` run on
-other weekdays, or under another name? Until then both stop *softly* (below).
+| Dashboard type | Roster tile | Resolves via |
+|---|---|---|
+| `Kickboksen` | `Boksen` | alias (confirmed by Koen) |
+| `Hyrox strength` | `Hyrox strength` | direct — it has its own tile |
+| `Hyrox daluren` | `Hyrox` | TYPE_BASE |
+| `TRX Daluren` | `Trx` | TYPE_BASE |
+| `Crossfit Daluren` | `CrossFit` | TYPE_BASE |
+| `Booty` | `Booty` | direct — Wed/Thu evenings only (summer schedule) |
+
+`config.rosterAliases` in `app.js` holds the aliases and survives config
+export/import. Add to it as more mismatches surface.
+
+### ⚠️ Class names NEST — substring matching alone picks the wrong class
+
+Real cases: `Boksen` ⊂ `Kickboksen` ⊂ `TeenFit kickboksen`, and `Hyrox` ⊂
+`Hyrox strength`. On Wednesday the teens class runs **18:00** and the adult
+Boksen **19:00**, so plain substring + nearest-upcoming would send an adult
+coach to a room full of teenagers.
+
+`findNearestUpcoming` therefore extracts the tile's **leading class name**
+(tiles read `"<name><start time>…"`) and prefers an exact name match over a
+substring hit, falling back to substring when nothing matches exactly. This also
+means the roster's own name must be the primary search term — searching the
+Dexos name `Kickboksen` would exact-match nothing and then substring-match
+`TeenFit kickboksen`. Hence `{{TYPE_ROSTER}}` before `{{TYPE_BASE}}`.
+
+Four tests pin this down; **do not reorder those candidates or drop the exact
+preference.**
 
 ### Soft stops — not every miss is a failure
 

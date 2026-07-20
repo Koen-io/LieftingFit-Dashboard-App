@@ -89,6 +89,19 @@
       <div class="calendar-card"><div class="columns"><div class="column is-10">
         <span class="title">CrossFit</span>20:00 - 21:00 Jim van Aken
       </div></div></div>
+      <!-- Nesting trap, from Wednesday's real roster: "Boksen" is a substring
+           of "TeenFit kickboksen", and the teens class runs EARLIER. Plain
+           substring matching would send an adult Boksen coach to the wrong
+           class. Same shape as "Hyrox" inside "Hyrox strength". -->
+      <div class="calendar-card"><div class="columns"><div class="column is-10">
+        <span class="title">TeenFit kickboksen</span>18:00 - 19:00 Abdel Kasmi
+      </div></div></div>
+      <div class="calendar-card"><div class="columns"><div class="column is-10">
+        <span class="title">Boksen</span>19:00 - 20:00 Abdel Kasmi
+      </div></div></div>
+      <div class="calendar-card"><div class="columns"><div class="column is-10">
+        <span class="title">Hyrox strength</span>18:00 - 19:00 Pelle Staub
+      </div></div></div>
     </div>
   </div>
 
@@ -278,8 +291,12 @@
     return { res, picked };
   }
 
-  n = await nearestWithBase('Hyrox strength', 'Hyrox', 12, 0);
-  expectTile('"Hyrox strength" falls back to the HYROX tile', n.picked, 'HYROX', '19:00');
+  // "Hyrox daluren" has no tile of its own, so TYPE_BASE must rescue it — and
+  // the exact-lead preference must then pick plain HYROX rather than the
+  // similarly-matching "Hyrox strength". (Do not use "Hyrox strength" here: it
+  // HAS its own tile, so exact matching correctly wins and nothing falls back.)
+  n = await nearestWithBase('Hyrox daluren', 'Hyrox', 12, 0);
+  expectTile('"Hyrox daluren" falls back to plain HYROX, not Hyrox strength', n.picked, 'HYROX', '19:00');
 
   n = await nearestWithBase('Crossfit Daluren', 'Crossfit', 9, 30);
   expectTile('"Crossfit Daluren" falls back to the CrossFit tile', n.picked, 'CrossFit', '18:00');
@@ -287,6 +304,36 @@
   // The exact type must still win when it does exist, rather than the looser base.
   n = await nearestWithBase('CrossFit', 'CrossFit', 6, 0);
   expectTile('exact type still preferred when present', n.picked, 'CrossFit', '7:00');
+
+  // ---- nested class names -----------------------------------------------
+  // "Boksen" ⊂ "TeenFit kickboksen" and the teens class runs EARLIER, so plain
+  // substring + nearest-upcoming would hand the adult coach the wrong class.
+  async function nearestRoster(typeRoster, base, h, m) {
+    picked = null; freeze(h, m);
+    const res = await run(
+      [{ type: 'clickNearest', selectors: [['has/{{TYPE_ROSTER}}'], ['has/{{TYPE_BASE}}']] }],
+      { typeRoster, typeBase: base }
+    );
+    unfreeze();
+    return { res, picked };
+  }
+
+  n = await nearestRoster('Boksen', 'Boksen', 17, 0);
+  expectTile('"Boksen" at 17:00 picks the 19:00 adult class, NOT 18:00 TeenFit kickboksen',
+             n.picked, 'Boksen', '19:00');
+
+  n = await nearestRoster('TeenFit kickboksen', 'TeenFit', 17, 0);
+  expectTile('"TeenFit kickboksen" still reaches its own 18:00 class',
+             n.picked, 'TeenFit kickboksen', '18:00');
+
+  // Same shape for Hyrox: the plain class must not be hijacked by "Hyrox strength".
+  n = await nearestRoster('Hyrox', 'Hyrox', 17, 0);
+  expectTile('"Hyrox" at 17:00 picks 19:00 HYROX, not the 18:00 Hyrox strength',
+             n.picked, 'HYROX', '19:00');
+
+  n = await nearestRoster('Hyrox strength', 'Hyrox', 17, 0);
+  expectTile('"Hyrox strength" reaches its own 18:00 class',
+             n.picked, 'Hyrox strength', '18:00');
 
   // ---- deriveNavigate: must NOT navigate; must return the URL ------------
   const before = location.href;

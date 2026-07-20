@@ -44,6 +44,15 @@
       "TRX", "Trx / Booty mix", "TRX Daluren", "Trx training", "Yoga",
       "zaal verhuurd voor event"
     ],
+    // Dexos programming type -> the name the Sportbit roster uses for the same
+    // class. Only needed where the two genuinely differ; most types match.
+    // Confirmed by Koen: roster "Boksen" is the adult class that Dexos calls
+    // "Kickboksen". ("Booty" needs no alias — it is spelled the same and simply
+    // does not run every weekday.)
+    rosterAliases: {
+      "Kickboksen": "Boksen",
+      "Kickboksen (daluren)": "Boksen"
+    },
     shortcuts: [
       {
         id: "coachboard", label: "Coachboard", sub: "Sportbit · Presentatie-modus",
@@ -74,10 +83,12 @@
             // it needs click-open + click-option rather than a `change` step.
             { type: "click", selectors: [["mat-select"]] },
             { type: "click", selectors: [["text/Alle roosters"]] },
-            // {{TYPE}} is a Dexos programming type; the roster uses its own,
-            // shorter names ("TRX Daluren" vs "Trx", "Hyrox strength" vs
-            // "HYROX"). Fall back to the first word so those still resolve.
-            { type: "clickNearest", selectors: [["has/{{TYPE}}"], ["has/{{TYPE_BASE}}"]] },
+            // {{TYPE_ROSTER}} first: the roster's own name for the class (via
+            // rosterAliases), falling back to the Dexos name when they agree.
+            // {{TYPE_BASE}} (first word) then rescues the coarser cases —
+            // "TRX Daluren" -> "Trx", "Hyrox strength" -> "HYROX" on days when
+            // only the plain class runs.
+            { type: "clickNearest", selectors: [["has/{{TYPE_ROSTER}}"], ["has/{{TYPE_BASE}}"]] },
             {
               type: "deriveNavigate",
               from: "/events/(\\d+)",
@@ -164,6 +175,7 @@
     if (Array.isArray(cfg.shortcuts)) base.shortcuts = cfg.shortcuts;
     if (Array.isArray(cfg.classTypes) && cfg.classTypes.length) base.classTypes = cfg.classTypes;
     if (typeof cfg.selectedType === "string") base.selectedType = cfg.selectedType;
+    if (cfg.rosterAliases && typeof cfg.rosterAliases === "object") base.rosterAliases = cfg.rosterAliases;
     if (base.classTypes.indexOf(base.selectedType) < 0) base.selectedType = base.classTypes[0];
     return base;
   }
@@ -188,6 +200,11 @@
     return {
       type: config.selectedType,
       contextMode: null, // filled per shortcut below
+      // The roster's own name for this class. Falls back to the Dexos name when
+      // no alias is configured. This is the PRIMARY search term — searching the
+      // Dexos name directly would match the wrong tile where names nest
+      // ("Kickboksen" is a substring of "TeenFit kickboksen").
+      typeRoster: (config.rosterAliases && config.rosterAliases[config.selectedType]) || config.selectedType,
       // First word of the class type. The Sportbit roster names classes more
       // coarsely than Dexos does, so "Hyrox strength" / "TRX Daluren" have to
       // fall back to "Hyrox" / "TRX" to find a tile at all.
