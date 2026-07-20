@@ -102,6 +102,9 @@
       <div class="calendar-card"><div class="columns"><div class="column is-10">
         <span class="title">Hyrox strength</span>18:00 - 19:00 Pelle Staub
       </div></div></div>
+      <div class="calendar-card"><div class="columns"><div class="column is-10">
+        <span class="title">CoreFit</span>19:30 - 20:00 Melanie Dries
+      </div></div></div>
     </div>
   </div>
 
@@ -363,6 +366,30 @@
   n = await nearestRoster('Hyrox strength', 'Hyrox', 17, 0);
   expectTile('"Hyrox strength" reaches its own 18:00 class',
              n.picked, 'Hyrox strength', '18:00');
+
+  // ---- no class is better than the WRONG class --------------------------
+  // Each of these previously resolved, by substring, to a class that merely
+  // contained the requested word. On a TV in front of a class, a confidently
+  // wrong workout is worse than none: an empty result stops softly and leaves
+  // the trainer on the roster to pick by hand.
+  function expectSoftStop(name, got) {
+    show(name, got.res && got.res.ok === false && got.res.soft === true && got.picked === null,
+         'got ' + JSON.stringify({ ok: got.res && got.res.ok, soft: got.res && got.res.soft, picked: got.picked }));
+  }
+
+  expectSoftStop('"Strength" does NOT hijack "Hyrox strength"',
+                 await nearestRoster('Strength', 'Strength', 12, 0));
+
+  expectSoftStop('"Core" does NOT hijack "CoreFit"',
+                 await nearestRoster('Core', 'Core', 12, 0));
+
+  expectSoftStop('"TeenFit Calisthenics" does NOT hijack "TeenFit kickboksen"',
+                 await nearestRoster('TeenFit Calisthenics', 'TeenFit', 12, 0));
+
+  // "The Outdoor Project - Castricum" must not fall back to the filler word
+  // "The"; typeBaseOf() blanks it, so the fallback candidate is empty.
+  expectSoftStop('a "The …" type does not fall back to the word "The"',
+                 await nearestRoster('The Outdoor Project - Castricum', '', 12, 0));
 
   // ---- deriveNavigate: must NOT navigate; must return the URL ------------
   const before = location.href;

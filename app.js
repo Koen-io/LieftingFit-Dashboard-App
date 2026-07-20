@@ -276,6 +276,16 @@
     if (IS_EXT) { location.href = url; return; }
     window.open(url, "_blank", "noopener");
   }
+  // Words that identify no class on their own. A base of "The" would happily
+  // match any tile containing it.
+  var BASE_STOPWORDS = ["the", "de", "het", "een", "van", "voor", "en", "zaal"];
+  function typeBaseOf(type) {
+    var first = String(type || "").split(/[\s(\/-]+/)[0] || "";
+    if (first.length < 3) return "";                                  // "TRX" is 3, keep it
+    if (BASE_STOPWORDS.indexOf(first.toLowerCase()) >= 0) return "";
+    return first;
+  }
+
   function buildContext() {
     var d = new Date();
     var pad = function (n) { return (n < 10 ? "0" : "") + n; };
@@ -290,7 +300,11 @@
       // First word of the class type. The Sportbit roster names classes more
       // coarsely than Dexos does, so "Hyrox strength" / "TRX Daluren" have to
       // fall back to "Hyrox" / "TRX" to find a tile at all.
-      typeBase: String(config.selectedType || "").split(/[\s(\/-]+/)[0],
+      //
+      // Suppressed when that first word carries no identity of its own — "The
+      // Outdoor Project - Castricum" would otherwise fall back to "The". Better
+      // to stop softly than to match on a filler word.
+      typeBase: typeBaseOf(config.selectedType),
       roster: "", // filled per shortcut from its own picker (Rooster tile)
       todayISO: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()),
       todayDMY: pad(d.getDate()) + pad(d.getMonth() + 1) + d.getFullYear(), // ddmmyyyy, e.g. 19072026 (Dexos block ids)

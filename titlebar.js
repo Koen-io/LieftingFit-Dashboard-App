@@ -69,7 +69,7 @@
 
     TOOLS.forEach(function (t) {
       var b = document.createElement("button");
-      b.className = "lf-btn";
+      b.className = "lf-btn lf-tool";   // lf-tool stretches to fill the bar
       b.textContent = t.label;
       b.addEventListener("click", function () {
         flash(t.label + "…");
@@ -109,6 +109,28 @@
     setInterval(function () { if (!document.getElementById(BAR_ID)) attach(); }, 2000);
   }
 
+  function applyAutoHide() {
+    var n = document.getElementById(BAR_ID);
+    if (n) n.className = autoHide ? "lf-autohide" : "";
+  }
+
+  // React to the setting immediately.
+  //
+  // Previously the value was read only at injection, so ticking "auto-hide" in
+  // Settings appeared to do nothing: every already-open Sportbit/Dexos tab kept
+  // the state it was injected with, and only a manual refresh picked it up.
+  // Content scripts do get storage.onChanged, so just listen.
+  function watchSetting() {
+    try {
+      chrome.storage.onChanged.addListener(function (changes, area) {
+        if (area !== "local" || !changes.config) return;
+        var cfg = changes.config.newValue;
+        autoHide = !!(cfg && cfg.titlebarAutoHide);
+        applyAutoHide();
+      });
+    } catch (e) {}
+  }
+
   function start() {
     send({ action: "whoAmI" }, function (res) {
       zaal = res && res.zaal ? res.zaal : null;
@@ -119,8 +141,9 @@
           autoHide = !!(cfg && cfg.titlebarAutoHide);
           attach();
           watch();
+          watchSetting();
         });
-      } catch (e) { attach(); watch(); }
+      } catch (e) { attach(); watch(); watchSetting(); }
     });
   }
 

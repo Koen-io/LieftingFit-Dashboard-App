@@ -14,48 +14,94 @@
   z-index: 2147483647 !important;   /* above Angular Material overlays */
   display: flex !important;
   align-items: center !important;
-  gap: 6px !important;
+  gap: 8px !important;
   box-sizing: border-box !important;
-  height: 38px !important;
-  padding: 0 10px !important;
+  height: 52px !important;
+  padding: 0 12px !important;
   background: #0b0d10 !important;
   border-bottom: 1px solid #23282f !important;
-  font: 500 13px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  font: 500 15px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
   color: #e6e8ea !important;
   transform: translateY(0);
   transition: transform .18s ease;
 }
 
+/* Neutralise the HOST page's styling of our children.
+ *
+ * Dexos is a jQuery admin whose stylesheet sets a width on bare `button`
+ * elements: every button in this bar came out exactly 83px wide, clipping
+ * "Training aanpassen" and "← Terug naar Dashboard". Coachboard's CSS does not
+ * do that, which is why the bar looked fine there and broken in Dexos.
+ * Anything the host might impose has to be reset explicitly. */
+#lf-titlebar * {
+  box-sizing: border-box !important;
+  float: none !important;
+  margin: 0 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  text-decoration: none !important;
+}
+
 /* Push the page down so the bar never covers the app's own header. */
-html.lf-has-titlebar body { padding-top: 38px !important; }
+html.lf-has-titlebar body { padding-top: 52px !important; }
 
 #lf-titlebar .lf-room {
   display: inline-flex !important;
   align-items: center !important;
-  gap: 5px !important;
-  padding: 4px 9px !important;
-  border-radius: 6px !important;
+  gap: 6px !important;
+  flex: 0 0 auto !important;
+  padding: 8px 13px !important;
+  border-radius: 8px !important;
   background: #e2673c !important;
   color: #fff !important;
-  font-weight: 700 !important;
+  font-weight: 800 !important;
+  font-size: 15px !important;
   white-space: nowrap !important;
 }
 
 #lf-titlebar .lf-btn {
   appearance: none !important;
+  -webkit-appearance: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  /* width:auto defeats the host's fixed button width; flex:0 0 auto keeps the
+     back button at its natural size while the tool buttons (below) stretch. */
+  width: auto !important;
+  flex: 0 0 auto !important;
+  height: 38px !important;
   border: 1px solid #2b3138 !important;
   background: #14181d !important;
   color: #e6e8ea !important;
-  padding: 5px 10px !important;
-  border-radius: 6px !important;
-  font: inherit !important;
+  padding: 0 16px !important;
+  border-radius: 8px !important;
+  font-family: inherit !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
   cursor: pointer !important;
   white-space: nowrap !important;
-  line-height: 1 !important;
 }
-#lf-titlebar .lf-btn:hover { background: #1d232a !important; border-color: #3a424b !important; }
+#lf-titlebar .lf-btn:hover { background: #232a32 !important; border-color: #4a545f !important; }
 #lf-titlebar .lf-btn:active { transform: translateY(1px); }
-#lf-titlebar .lf-back { border-color: #3a424b !important; }
+#lf-titlebar .lf-back { flex: 0 0 auto !important; border-color: #3a424b !important; }
+
+/* The five tool buttons share the leftover width instead of huddling on the
+   left — Koen asked for them to be clearly readable from across the gym. */
+#lf-titlebar .lf-tool {
+  flex: 1 1 auto !important;
+  max-width: 210px !important;
+  font-weight: 700 !important;
+}
 
 #lf-titlebar .lf-sep {
   width: 1px !important;
@@ -65,20 +111,23 @@ html.lf-has-titlebar body { padding-top: 38px !important; }
 }
 
 #lf-titlebar .lf-status {
-  margin-left: auto !important;
-  padding-right: 4px !important;
+  flex: 0 1 auto !important;
+  padding-left: 4px !important;
   color: #9aa3ad !important;
   font-weight: 400 !important;
-  max-width: 44% !important;
+  font-size: 13px !important;
+  max-width: 26% !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
+  text-align: right !important;
 }
+#lf-titlebar .lf-status:empty { display: none !important; }
 #lf-titlebar .lf-status-bad { color: #ff8f8f !important; }
 
 /* Auto-hide: slides away, returns when the pointer reaches the top edge.
  * The 6px lip is what makes it reachable again without a keyboard. */
-#lf-titlebar.lf-autohide { transform: translateY(-32px); }
+#lf-titlebar.lf-autohide { transform: translateY(-46px); }
 #lf-titlebar.lf-autohide:hover { transform: translateY(0); }
 html.lf-has-titlebar body:has(#lf-titlebar.lf-autohide) { padding-top: 6px !important; }
 

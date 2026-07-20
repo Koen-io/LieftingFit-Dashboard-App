@@ -159,7 +159,13 @@ function buildContextForBackground(cfg, shortcut) {
   return {
     type: type,
     typeRoster: aliases[type] || type,
-    typeBase: String(type).split(/[\s(\/-]+/)[0],
+    typeBase: (function () {
+      // Mirror of typeBaseOf() in app.js — a base of "The" identifies nothing.
+      var first = String(type).split(/[\s(\/-]+/)[0] || "";
+      if (first.length < 3) return "";
+      if (["the", "de", "het", "een", "van", "voor", "en", "zaal"].indexOf(first.toLowerCase()) >= 0) return "";
+      return first;
+    })(),
     roster: (shortcut && shortcut.selectedRoster) || "",
     todayISO: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()),
     todayDMY: pad(d.getDate()) + pad(d.getMonth() + 1) + d.getFullYear(),
@@ -254,10 +260,12 @@ function replayInPage(steps, context) {
     function subst(str) {
       if (typeof str !== "string") return str;
       return str
-        // Both fall back to the full type when absent, so configs saved before
-        // these placeholders existed still substitute to something usable.
-        .replace(/\{\{TYPE_ROSTER\}\}/g, context.typeRoster || context.type || "")
-        .replace(/\{\{TYPE_BASE\}\}/g, context.typeBase || context.type || "")
+        // Fall back to the full type only when the field is ABSENT (a config
+        // saved before these placeholders existed). An empty string is a
+        // deliberate "no usable base" — e.g. "The Outdoor Project" suppresses
+        // its own base — and must stay empty, or the suppression is undone here.
+        .replace(/\{\{TYPE_ROSTER\}\}/g, context.typeRoster != null ? context.typeRoster : (context.type || ""))
+        .replace(/\{\{TYPE_BASE\}\}/g, context.typeBase != null ? context.typeBase : (context.type || ""))
         // The Rooster tile's own picker — independent of the class-type dropdown.
         .replace(/\{\{ROSTER\}\}/g, context.roster || "")
         .replace(/\{\{TYPE\}\}/g, context.type || "")
@@ -460,6 +468,10 @@ function replayInPage(steps, context) {
         var sel = cands[c];
         if (sel.indexOf("has/") !== 0) continue;
         var needles = sel.slice(4).split("&&").map(function (s) { return norm(s); }).filter(Boolean);
+        // An empty needle list would match EVERY tile: the loop below never
+        // runs, so `ok` stays true for anything carrying a time. That turned an
+        // unresolvable type into "open some arbitrary class". Skip the candidate.
+        if (!needles.length) continue;
         var nodes = document.querySelectorAll("a,button,div,td,li,tr,span,p");
         for (var i = 0; i < nodes.length; i++) {
           var txt = norm(nodes[i].textContent);
@@ -490,12 +502,21 @@ function replayInPage(steps, context) {
       });
       if (leaves.length) pool = leaves;
 
-      // Prefer tiles whose class name IS the requested one over tiles that
-      // merely contain it. Only meaningful for a single-needle selector; a
-      // date+type selector (the Dexos grid) has no leading-name shape.
+      // REQUIRE the tile's class name to BE the requested one — do not settle
+      // for a tile that merely contains it.
+      //
+      // Substring matching as a last resort silently opened the wrong class:
+      // "Strength" matched "Hyrox strength", "Core" matched "CoreFit",
+      // "TeenFit Calisthenics" matched "TeenFit kickboksen". On a TV in front of
+      // a class, the wrong workout is worse than no workout — an empty result
+      // stops softly and leaves the trainer on the roster to pick by hand,
+      // which is recoverable. A confidently wrong Coachboard is not.
+      //
+      // Only applies to a single-needle selector; the Dexos grid selector
+      // (date && type) has no leading-name shape and keeps substring matching.
       if (activeNeedles && activeNeedles.length === 1) {
-        var exact = pool.filter(function (p) { return p.lead && p.lead === activeNeedles[0]; });
-        if (exact.length) pool = exact;
+        pool = pool.filter(function (p) { return p.lead && p.lead === activeNeedles[0]; });
+        if (!pool.length) return null;
       }
 
       var upcoming = pool.filter(function (p) { return p.min >= nowMin; });
