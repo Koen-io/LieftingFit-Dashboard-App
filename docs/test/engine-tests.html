@@ -105,6 +105,34 @@
     </div>
   </div>
 
+  <!-- ---------- Login-form shapes, for the auto-login guard ---------- -->
+  <div id="fx-login">
+    <form>
+      <input type="text" name="email">
+      <input type="password" name="password">
+      <button type="submit">Inloggen</button>
+    </form>
+  </div>
+
+  <!-- A change-password form must NOT be treated as a login form: auto-filling
+       and submitting it would push the stored password into the wrong fields. -->
+  <div id="fx-changepw">
+    <form>
+      <input type="password" name="current">
+      <input type="password" name="new">
+      <input type="password" name="confirm">
+      <button type="submit">Opslaan</button>
+    </form>
+  </div>
+
+  <!-- No password field at all — an ordinary page. -->
+  <div id="fx-nopw">
+    <form>
+      <input type="text" name="zoek">
+      <button type="submit">Zoeken</button>
+    </form>
+  </div>
+
   <!-- ---------- Coachboard toolbar (12 coarse groups, not 41 types) ---------- -->
   <div id="fx-coachboard">
     <select id="sel_programma">
@@ -118,6 +146,7 @@
 </div>
 
 <script src="../../background.js"></script>
+<script src="../../login.js"></script>
 <script>
 (async function () {
   const out = document.getElementById('out');
@@ -157,7 +186,7 @@
   // wrapper — which made `has/Yoga` match the wrapper (via the hidden Dexos
   // <option>Yoga</option>) and pick up a time from the roster, turning a
   // should-fail case into a pass.
-  const FIXTURES = ['fx-dexos', 'fx-roster', 'fx-coachboard'];
+  const FIXTURES = ['fx-dexos', 'fx-roster', 'fx-coachboard', 'fx-login', 'fx-changepw', 'fx-nopw'];
   const host = document.getElementById('fixtures');
   const stash = {};
   FIXTURES.forEach(f => { stash[f] = document.getElementById(f); });
@@ -353,6 +382,28 @@
   show('Coachboard rejects a type it has no group for (rather than casting the wrong class)',
        r.ok === false && /bestaat niet/.test(r.reason || ''),
        'got ' + JSON.stringify({ ok: r.ok, reason: r.reason }));
+
+  // ---- auto-login guard --------------------------------------------------
+  // This check is what keeps a stored password out of the wrong form.
+  const guard = window.__lfLoginGuard;
+  show('auto-login guard is exposed for testing', typeof guard === 'function',
+       'got ' + typeof guard);
+
+  if (typeof guard === 'function') {
+    only('fx-login');
+    const okForm = guard();
+    show('recognises a real login form (one password + username + submit)',
+         !!okForm && !!okForm.pw && !!okForm.user,
+         'got ' + JSON.stringify(okForm ? {pw: !!okForm.pw, user: !!okForm.user} : okForm));
+
+    only('fx-changepw');
+    show('REFUSES a change-password form (3 password fields)', guard() === null,
+         'got ' + JSON.stringify(guard()));
+
+    only('fx-nopw');
+    show('ignores a page with no password field', guard() === null,
+         'got ' + JSON.stringify(guard()));
+  }
 
   FIXTURES.forEach(f => { if (!stash[f].isConnected) host.appendChild(stash[f]); });
 

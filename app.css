@@ -340,6 +340,27 @@ kbd {
 .add-row { width: 100%; padding: 12px; border: 1px dashed var(--border-strong); background: transparent; color: var(--muted); border-radius: 10px; cursor: pointer; font-weight: 600; }
 .add-row:hover { color: var(--text); border-color: var(--blue); }
 .help-text { color: var(--muted-2); font-size: 12.5px; line-height: 1.5; margin: 6px 0 0; }
+/* Storing a password in plaintext is a real tradeoff — the warning should read
+   as one, not as boilerplate help text. */
+.help-warn {
+  color: #ffc9a3;
+  background: rgba(226,103,60,0.10);
+  border: 1px solid rgba(226,103,60,0.32);
+  border-radius: 9px;
+  padding: 9px 11px;
+  margin-top: 9px;
+}
+.help-warn b { color: #fff; }
+.set-field { display: block; margin-top: 12px; }
+.set-field > span { display: block; color: var(--muted); font-size: 12.5px; margin-bottom: 5px; }
+.set-field input {
+  width: 100%; box-sizing: border-box;
+  padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border-strong); background: var(--panel-2);
+  color: var(--text); font-size: 14px;
+}
+.set-field input:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+.set-row-btns { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 
 /* macro (Type B) controls in settings */
 .macro-field { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }

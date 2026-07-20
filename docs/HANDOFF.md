@@ -259,6 +259,71 @@ Three traps if you extend the fixtures — each one cost a debugging round:
   `<span class="fail">FAIL "Hyrox strength" … 19:00</span>`.) Progress goes to
   `document.title` and the console, which the selectors cannot reach.
 
+## Room console (spec items 1–4)
+
+Built from `docs/ROOM-CONSOLE-SPEC.md`.
+
+**Single-tab shell.** `runMacro` runs in the **sender's** tab
+(`chrome.tabs.update`), never a new one, and plain-URL tiles navigate the current
+tab. A new tab would land the tool on a tab that isn't being cast.
+
+**Zaal tabs.** One Chrome tab per room; `openRoom` focuses the existing tab or
+opens one. The mapping lives in `storage.session` — an idle MV3 service worker is
+torn down and a module variable would lose it. The room rides in the dashboard
+URL (`?zaal=A`), which survives reload and session restore; a tab id does not.
+
+**Titlebar** (`titlebar.js` / `titlebar.css`) on `*.sportbitapp.nl`. Content
+scripts cannot call `chrome.tabs`, so buttons message the background. Both apps
+re-render hard, so it re-attaches via `MutationObserver` + a 2s interval. It is
+**cast to the TV too** — hence slim, with auto-hide in Settings.
+
+**Rooster picker.** Its own dropdown on the tile, independent of the class-type
+selector, driving `{{ROSTER}}`; `mat-select` needs click-open + click-option.
+
+### ⚠️ Config upgrades merge by id — do not "simplify" this
+
+`normalize()` used to let a saved `shortcuts` array replace the built-ins
+wholesale, so **any config saved by an older build permanently shadowed new
+tiles**: reloading gave back the old dashboard (no Weekprogramma, no Rooster
+picker, the stale hardcoded Coachboard id) and updating the defaults changed
+nothing. Built-ins now refresh from `DEFAULT_CONFIG` while the user's own tiles
+and per-tile choices (`selectedRoster`, `accent`) survive. Verified against a
+simulated old config.
+
+### Auto-login — stored credentials (Koen chose this over Chrome's manager)
+
+`login.js`, content script on the Sportbit origin. Fills and submits the login
+form so a tool button never dead-ends on a login screen.
+
+**Credentials live under their own `chrome.storage.local` key, NOT in `config`.**
+"Exporteer config" writes a file that moves between devices — putting the
+password there would leak it. Keep them separate.
+
+**Security position, stated plainly:** `chrome.storage.local` is **plaintext on
+disk**, and this account can read ~1010 members' names, phones, emails and
+subscriptions. Anyone with the laptop's Chrome profile can extract it. Koen
+accepted this for a gym-owned laptop; Settings carries a visible warning and a
+**Wis inloggegevens** button. If the laptop leaves the gym, clear it.
+
+**Why the guard matters.** The script matches the whole origin, because Sportbit
+is an SPA and a client-side route to the login view does not re-run a
+path-scoped content script. That means it can also meet a **change-password**
+form — where auto-filling would push the stored password into the wrong field.
+`looksLikeLogin()` therefore requires **exactly one** visible password input plus
+a username field, and either a `/login` URL or a login-worded submit button. A
+change-password form (2–3 password inputs) fails it. **Three tests cover this;
+keep them.**
+
+**Loop guard:** the attempt is marked in `sessionStorage` *before* submitting, so
+a mid-flight navigation or re-render cannot cause a second submit — repeated bad
+logins are how accounts get locked. On failure it says so once and stops.
+
+⚠️ **The selectors are unverified against the real form.** The account was
+already authenticated and logging it out to inspect was not acceptable, so
+detection is by *shape* (one password + preceding text input + submit) rather
+than pinned ids. **If auto-login misbehaves, check this first** — the fix is
+likely a selector, not the logic.
+
 ### The one untested link: loading the extension
 
 Every macro has been verified by running the engine's exact logic in the live

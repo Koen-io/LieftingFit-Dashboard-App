@@ -545,6 +545,75 @@
     sc.appendChild(addSc);
     body.appendChild(sc);
 
+    // Auto-login. Deliberately NOT part of `config`: it is stored under its own
+    // chrome.storage.local key so "Exporteer config" can never write the
+    // password into a file that gets moved between devices or shared.
+    if (IS_EXT) {
+      var lg = el("div", { "class": "set-section" }, "<h3>Automatisch inloggen</h3>");
+      lg.appendChild(el("p", { "class": "help-text" },
+        "Eén Sportbit-login geldt voor álle knoppen (Dexos hoort bij hetzelfde account). " +
+        "Vul je gegevens hier in en de extensie logt zelf in zodra een knop op het inlogscherm uitkomt."));
+      lg.appendChild(el("p", { "class": "help-text help-warn" },
+        "⚠ Let op: dit wachtwoord wordt <b>onversleuteld</b> op deze laptop bewaard en geeft toegang " +
+        "tot de ledenadministratie. Gebruik dit alleen op een gym-laptop waar je bij kunt, en wis het " +
+        "als de laptop weggaat. Het staat niet in de geëxporteerde configuratie."));
+
+      var uWrap = el("label", { "class": "set-field" });
+      uWrap.appendChild(el("span", null, "Gebruikersnaam / e-mail"));
+      var uIn = el("input", { type: "text", autocomplete: "off", spellcheck: "false" });
+      uWrap.appendChild(uIn);
+      lg.appendChild(uWrap);
+
+      var pWrap = el("label", { "class": "set-field" });
+      pWrap.appendChild(el("span", null, "Wachtwoord"));
+      var pIn = el("input", { type: "password", autocomplete: "new-password" });
+      pWrap.appendChild(pIn);
+      lg.appendChild(pWrap);
+
+      var lgStatus = el("div", { "class": "help-text" }, "");
+      lg.appendChild(lgStatus);
+
+      // Load what is stored (password shown blank; typing replaces it).
+      chrome.storage.local.get("credentials", function (r) {
+        var c = r && r.credentials;
+        if (c && c.user) {
+          uIn.value = c.user;
+          lgStatus.innerHTML = "Opgeslagen voor <b>" + escapeHtml(c.user) + "</b>. Laat het wachtwoordveld leeg om het te behouden.";
+        } else {
+          lgStatus.textContent = "Nog niets opgeslagen — automatisch inloggen staat uit.";
+        }
+      });
+
+      var lgRow = el("div", { "class": "set-row-btns" });
+      var lgSave = el("button", { "class": "btn btn-ghost", "type": "button" }, "Inloggegevens opslaan");
+      lgSave.addEventListener("click", function () {
+        var user = uIn.value.trim();
+        if (!user) { lgStatus.textContent = "Vul eerst een gebruikersnaam in."; return; }
+        chrome.storage.local.get("credentials", function (r) {
+          var prev = (r && r.credentials) || {};
+          var pass = pIn.value || prev.pass || "";
+          if (!pass) { lgStatus.textContent = "Vul ook een wachtwoord in."; return; }
+          chrome.storage.local.set({ credentials: { user: user, pass: pass } }, function () {
+            pIn.value = "";
+            lgStatus.innerHTML = "Opgeslagen voor <b>" + escapeHtml(user) + "</b>.";
+            toast("Inloggegevens opgeslagen");
+          });
+        });
+      });
+      var lgClear = el("button", { "class": "btn btn-ghost btn-danger", "type": "button" }, "Wis inloggegevens");
+      lgClear.addEventListener("click", function () {
+        chrome.storage.local.remove("credentials", function () {
+          uIn.value = ""; pIn.value = "";
+          lgStatus.textContent = "Gewist — automatisch inloggen staat uit.";
+          toast("Inloggegevens gewist");
+        });
+      });
+      lgRow.appendChild(lgSave);
+      lgRow.appendChild(lgClear);
+      lg.appendChild(lgRow);
+      body.appendChild(lg);
+    }
+
     // Class types (the dropdown on the main page)
     var lt = el("div", { "class": "set-section" }, "<h3>Lestypes (dropdown hoofdscherm)</h3>");
     lt.appendChild(el("p", { "class": "help-text" },

@@ -341,6 +341,27 @@ kbd {
 .add-row { width: 100%; padding: 12px; border: 1px dashed var(--border-strong); background: transparent; color: var(--muted); border-radius: 10px; cursor: pointer; font-weight: 600; }
 .add-row:hover { color: var(--text); border-color: var(--blue); }
 .help-text { color: var(--muted-2); font-size: 12.5px; line-height: 1.5; margin: 6px 0 0; }
+/* Storing a password in plaintext is a real tradeoff — the warning should read
+   as one, not as boilerplate help text. */
+.help-warn {
+  color: #ffc9a3;
+  background: rgba(226,103,60,0.10);
+  border: 1px solid rgba(226,103,60,0.32);
+  border-radius: 9px;
+  padding: 9px 11px;
+  margin-top: 9px;
+}
+.help-warn b { color: #fff; }
+.set-field { display: block; margin-top: 12px; }
+.set-field > span { display: block; color: var(--muted); font-size: 12.5px; margin-bottom: 5px; }
+.set-field input {
+  width: 100%; box-sizing: border-box;
+  padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border-strong); background: var(--panel-2);
+  color: var(--text); font-size: 14px;
+}
+.set-field input:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+.set-row-btns { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 
 /* macro (Type B) controls in settings */
 .macro-field { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
@@ -1016,6 +1037,75 @@ kbd {
     });
     sc.appendChild(addSc);
     body.appendChild(sc);
+
+    // Auto-login. Deliberately NOT part of `config`: it is stored under its own
+    // chrome.storage.local key so "Exporteer config" can never write the
+    // password into a file that gets moved between devices or shared.
+    if (IS_EXT) {
+      var lg = el("div", { "class": "set-section" }, "<h3>Automatisch inloggen</h3>");
+      lg.appendChild(el("p", { "class": "help-text" },
+        "Eén Sportbit-login geldt voor álle knoppen (Dexos hoort bij hetzelfde account). " +
+        "Vul je gegevens hier in en de extensie logt zelf in zodra een knop op het inlogscherm uitkomt."));
+      lg.appendChild(el("p", { "class": "help-text help-warn" },
+        "⚠ Let op: dit wachtwoord wordt <b>onversleuteld</b> op deze laptop bewaard en geeft toegang " +
+        "tot de ledenadministratie. Gebruik dit alleen op een gym-laptop waar je bij kunt, en wis het " +
+        "als de laptop weggaat. Het staat niet in de geëxporteerde configuratie."));
+
+      var uWrap = el("label", { "class": "set-field" });
+      uWrap.appendChild(el("span", null, "Gebruikersnaam / e-mail"));
+      var uIn = el("input", { type: "text", autocomplete: "off", spellcheck: "false" });
+      uWrap.appendChild(uIn);
+      lg.appendChild(uWrap);
+
+      var pWrap = el("label", { "class": "set-field" });
+      pWrap.appendChild(el("span", null, "Wachtwoord"));
+      var pIn = el("input", { type: "password", autocomplete: "new-password" });
+      pWrap.appendChild(pIn);
+      lg.appendChild(pWrap);
+
+      var lgStatus = el("div", { "class": "help-text" }, "");
+      lg.appendChild(lgStatus);
+
+      // Load what is stored (password shown blank; typing replaces it).
+      chrome.storage.local.get("credentials", function (r) {
+        var c = r && r.credentials;
+        if (c && c.user) {
+          uIn.value = c.user;
+          lgStatus.innerHTML = "Opgeslagen voor <b>" + escapeHtml(c.user) + "</b>. Laat het wachtwoordveld leeg om het te behouden.";
+        } else {
+          lgStatus.textContent = "Nog niets opgeslagen — automatisch inloggen staat uit.";
+        }
+      });
+
+      var lgRow = el("div", { "class": "set-row-btns" });
+      var lgSave = el("button", { "class": "btn btn-ghost", "type": "button" }, "Inloggegevens opslaan");
+      lgSave.addEventListener("click", function () {
+        var user = uIn.value.trim();
+        if (!user) { lgStatus.textContent = "Vul eerst een gebruikersnaam in."; return; }
+        chrome.storage.local.get("credentials", function (r) {
+          var prev = (r && r.credentials) || {};
+          var pass = pIn.value || prev.pass || "";
+          if (!pass) { lgStatus.textContent = "Vul ook een wachtwoord in."; return; }
+          chrome.storage.local.set({ credentials: { user: user, pass: pass } }, function () {
+            pIn.value = "";
+            lgStatus.innerHTML = "Opgeslagen voor <b>" + escapeHtml(user) + "</b>.";
+            toast("Inloggegevens opgeslagen");
+          });
+        });
+      });
+      var lgClear = el("button", { "class": "btn btn-ghost btn-danger", "type": "button" }, "Wis inloggegevens");
+      lgClear.addEventListener("click", function () {
+        chrome.storage.local.remove("credentials", function () {
+          uIn.value = ""; pIn.value = "";
+          lgStatus.textContent = "Gewist — automatisch inloggen staat uit.";
+          toast("Inloggegevens gewist");
+        });
+      });
+      lgRow.appendChild(lgSave);
+      lgRow.appendChild(lgClear);
+      lg.appendChild(lgRow);
+      body.appendChild(lg);
+    }
 
     // Class types (the dropdown on the main page)
     var lt = el("div", { "class": "set-section" }, "<h3>Lestypes (dropdown hoofdscherm)</h3>");

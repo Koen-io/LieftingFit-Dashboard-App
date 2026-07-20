@@ -16,7 +16,7 @@
   "content_scripts": [
     {
       "matches": ["https://*.sportbitapp.nl/*"],
-      "js": ["titlebar.js"],
+      "js": ["titlebar.js", "login.js"],
       "css": ["titlebar.css"],
       "run_at": "document_idle",
       "all_frames": false
