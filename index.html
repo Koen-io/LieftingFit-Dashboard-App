@@ -40,6 +40,10 @@
        different things need three tabs, each cast once. Injected by app.js. -->
   <section class="zaal-bar" id="zaalBar" hidden></section>
 
+  <!-- What is on right now for the selected type, and what follows.
+       Filled by renderNowNext(); hidden until the roster answers. -->
+  <section class="nownext" id="nowNext" hidden></section>
+
   <section class="context-bar" id="contextBar">
     <div class="context-label">
       <svg viewBox="0 0 24 24" aria-hidden="true" class="rb-icon"><path d="M6 6v12M3 8v8M18 6v12M21 8v8M6 12h12"/></svg>
@@ -112,6 +116,16 @@
         <button class="btn btn-primary" data-close>Ander lestype kiezen</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Cover shown while a tool is being opened, so the dashboard does not sit
+     there looking unresponsive before the tab navigates. -->
+<div class="busy" id="busy" hidden>
+  <div class="busy-box">
+    <div class="busy-spinner" aria-hidden="true"></div>
+    <div class="busy-text" id="busyText">Bezig…</div>
+    <div class="busy-sub">Een moment geduld</div>
   </div>
 </div>
 

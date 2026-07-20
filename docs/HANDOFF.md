@@ -432,3 +432,33 @@ Run: `node <file>.mjs` (Playwright + `/opt/pw-browsers/chromium`).
 ## Note
 `scratchpad/` holds Koen's uploaded internal Dexos HTML/video and derived frames
 — kept local, **not committed** (internal gym data).
+
+## Room console v2 — live roster features
+
+All driven by `/cbm/api/web/rooster/` plus the date-keyed snapshot (above).
+
+- **"Bezig…" cover.** A macro navigates and then replays clicks, so the trainer
+  would watch menus open by themselves. The busy flag lives in `storage.session`
+  keyed by tab, NOT in the page — the first thing a macro does is navigate away
+  and destroy any in-page overlay. Each injected titlebar asks `amIBusy` on load
+  and redraws the cover; the background clears it when the macro ends. A 30s
+  safety valve prevents a stuck cover trapping anyone.
+- **"Nu bezig" tile.** Ignores the class-type dropdown; opens whatever is
+  running now (else next) anywhere in the gym. Fewest decisions for a coach
+  about to start. Its chip shows the class it would open.
+- **Nu / Hierna strip.** Current and next class for the selected type, both
+  clickable. Refreshes every 60s.
+- **"Volgende: …" in the titlebar.** Only on a Coachboard. The id comes from the
+  snapshot, so switching classes is one instant navigation instead of a trip
+  back to the dashboard.
+- **Which class was opened** is now reported — dashboard toast and titlebar
+  status both name it, so a wrong pick is visible before it is on the TV.
+- **Auto-select type on arrival** (`config.autoSelectType`, on by default).
+  Applied only on dashboard load, never mid-session, so it cannot yank the
+  dropdown from under a deliberate choice.
+- **`STEP_TIMEOUT` 15s → 5s.** The roster is checked up front now, so a step
+  that cannot find its element is genuinely missing rather than slow. 5s still
+  covers the Dexos grid's AJAX reload (~2–3s observed).
+
+`start`/`eind` come back as full ISO stamps, so the time parsers prefer the
+`T##:##` group — a bare `\d{1,2}:\d{2}` could otherwise read part of the date.

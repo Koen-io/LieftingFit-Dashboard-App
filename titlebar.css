@@ -190,3 +190,41 @@ html.lf-has-titlebar body:has(#lf-titlebar.lf-autohide) { padding-top: 6px !impo
   color: #ffc9a3 !important;
   font-size: 13.5px !important;
 }
+
+/* "Bezig…" cover — hides a macro's clicking from the trainer (and the TV). */
+#lf-busy {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483646 !important;      /* just under the titlebar */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #0b0d10 !important;
+  opacity: 1;
+  transition: opacity .18s ease;
+  font: 400 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+}
+#lf-busy.lf-busy-out { opacity: 0; }
+#lf-busy .lf-busy-box { text-align: center !important; color: #e6e8ea !important; }
+#lf-busy .lf-busy-spinner {
+  width: 46px !important; height: 46px !important;
+  margin: 0 auto 20px !important;
+  border-radius: 50% !important;
+  border: 3px solid rgba(255,255,255,0.14) !important;
+  border-top-color: #e2673c !important;
+  animation: lf-spin .8s linear infinite;
+}
+@keyframes lf-spin { to { transform: rotate(360deg); } }
+#lf-busy .lf-busy-text { font-size: 19px !important; font-weight: 700 !important; color: #fff !important; }
+#lf-busy .lf-busy-sub { margin-top: 6px !important; font-size: 13.5px !important; color: #9aa3ad !important; }
+@media (prefers-reduced-motion: reduce) { #lf-busy .lf-busy-spinner { animation-duration: 2.4s; } }
+
+/* "Volgende les" — appears only on a Coachboard. */
+#lf-titlebar .lf-next {
+  flex: 0 0 auto !important;
+  background: #1c2b1f !important;
+  border-color: #2f5637 !important;
+  color: #b9f0c4 !important;
+  font-weight: 700 !important;
+}
+#lf-titlebar .lf-next:hover { background: #243a2a !important; border-color: #3f7047 !important; }

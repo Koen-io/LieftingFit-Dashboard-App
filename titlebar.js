@@ -43,6 +43,44 @@
     if (text) setTimeout(function () { if (s.textContent === text) s.textContent = ""; }, 4000);
   }
 
+  /* ---- "Bezig…" cover ----
+   * Hides the mechanics of a macro: the page it lands on, the menus it opens,
+   * the dropdowns it changes. The background owns the busy flag (per tab), so
+   * the cover can be re-drawn on the next page too — a single in-page overlay
+   * would die with the first navigation.
+   */
+  var BUSY_ID = "lf-busy";
+
+  function showBusy(label) {
+    if (document.getElementById(BUSY_ID)) {
+      var t = document.querySelector("#" + BUSY_ID + " .lf-busy-text");
+      if (t && label) t.textContent = label;
+      return;
+    }
+    var ov = document.createElement("div");
+    ov.id = BUSY_ID;
+    ov.innerHTML =
+      '<div class="lf-busy-box">' +
+        '<div class="lf-busy-spinner" aria-hidden="true"></div>' +
+        '<div class="lf-busy-text">' + (label || "Bezig…") + "</div>" +
+        '<div class="lf-busy-sub">Een moment geduld</div>' +
+      "</div>";
+    (document.body || document.documentElement).appendChild(ov);
+  }
+
+  function hideBusy() {
+    var n = document.getElementById(BUSY_ID);
+    if (!n) return;
+    n.classList.add("lf-busy-out");            // fade rather than snap
+    setTimeout(function () { if (n.parentNode) n.remove(); }, 180);
+  }
+
+  function syncBusy() {
+    send({ action: "amIBusy" }, function (res) {
+      if (res && res.busy) showBusy(res.label); else hideBusy();
+    });
+  }
+
   // Same message as the dashboard's dialog, injected over the page. Content
   // scripts cannot reach the dashboard's DOM, so it is rebuilt here.
   function showNoClass(type, label, rosterFilter) {
@@ -131,10 +169,18 @@
       b.className = "lf-btn lf-tool";   // lf-tool stretches to fill the bar
       b.textContent = t.label;
       b.addEventListener("click", function () {
+        showBusy(t.label + " openen…");           // cover immediately, before anything moves
         flash(t.label + "…");
         send({ action: "runTool", tool: t.id }, function (res) {
           if (!res) return;                       // navigation usually kills us first
-          if (res.ok) { flash(""); return; }
+          if (res.ok) {
+            hideBusy();
+            // Say WHICH class was opened — a coach can spot a wrong pick before
+            // it is on the TV.
+            flash(res.klas ? res.klas + (res.start ? " " + res.start : "") : "");
+            return;
+          }
+          hideBusy();
           // Nothing was opened because there is no such class today — the same
           // dialog the dashboard shows, so the trainer gets one consistent
           // explanation wherever they clicked.
@@ -145,11 +191,50 @@
       bar.appendChild(b);
     });
 
+    // Filled in by refreshNextClass() once we know what follows.
+    var nextBtn = document.createElement("button");
+    nextBtn.className = "lf-btn lf-next";
+    nextBtn.hidden = true;
+    bar.appendChild(nextBtn);
+
     var status = document.createElement("span");
     status.className = "lf-status";
     bar.appendChild(status);
 
     return bar;
+  }
+
+  /* On a Coachboard, offer the class that follows this one.
+   *
+   * During a busy evening a coach would otherwise go back to the dashboard,
+   * re-pick the type and click again between every class. The id is already
+   * known from the roster snapshot, so this is a single instant navigation.
+   */
+  function refreshNextClass() {
+    var btn = document.querySelector("#" + BAR_ID + " .lf-next");
+    if (!btn) return;
+    var onCoachboard = /\/cbm\/coachboard\//.test(location.pathname);
+    if (!onCoachboard) { btn.hidden = true; return; }
+
+    // Which class is on screen? The URL carries its id.
+    var m = /\/cbm\/coachboard\/(\d+)/.exec(location.pathname);
+    var shownId = m ? parseInt(m[1], 10) : null;
+
+    send({ action: "dayInfo" }, function (res) {
+      if (!res || !res.ok) { btn.hidden = true; return; }
+      // "What is on after the one I am showing" — walk the whole day, not just
+      // the selected type, because the coach may hand over to another class.
+      var next = res.anyNext;
+      var cur = res.anyCurrent;
+      var target = (cur && cur.id !== shownId) ? cur : next;
+      if (!target || target.id === shownId) { btn.hidden = true; return; }
+      btn.hidden = false;
+      btn.textContent = "Volgende: " + target.titel + " " + target.start + " →";
+      btn.onclick = function () {
+        showBusy(target.titel + " openen…");
+        send({ action: "openClass", id: target.id }, function () { hideBusy(); });
+      };
+    });
   }
 
   function barHeight() { return autoHide ? 6 : 52; }
@@ -209,6 +294,8 @@
     document.documentElement.classList.add("lf-has-titlebar");
     nudgeFixedTops();
     syncFullscreen();
+    syncBusy();          // a macro may still be mid-flight on this tab
+    refreshNextClass();
   }
 
   // Sportbit is Angular and Dexos is jQuery; both re-render large parts of the
@@ -234,6 +321,17 @@
     ["fullscreenchange", "webkitfullscreenchange"].forEach(function (evt) {
       document.addEventListener(evt, syncFullscreen);
     });
+
+    // The background clears the cover when a macro finishes.
+    try {
+      chrome.runtime.onMessage.addListener(function (msg) {
+        if (msg && msg.action === "busyDone") { hideBusy(); refreshNextClass(); }
+      });
+    } catch (e) {}
+
+    // Classes roll over during the evening — keep "Volgende" honest without
+    // needing a reload.
+    setInterval(refreshNextClass, 60000);
   }
 
   function applyAutoHide() {

@@ -59,7 +59,17 @@
     // The titlebar is cast to the TV along with everything else; auto-hide slides
     // it away so it does not sit over the Coachboard during a class.
     titlebarAutoHide: false,
+    // On arrival, preselect the class type that is running or starts next.
+    autoSelectType: true,
     shortcuts: [
+      {
+        // Ignores the class-type dropdown entirely: opens whatever is running
+        // in the gym right now (or starts next). The fewest decisions for a
+        // trainer who is about to start coaching.
+        id: "nubezig", label: "Nu bezig", sub: "Direct de les die nu draait",
+        icon: "present", accent: "red", cast: true, contextMode: "none",
+        url: "https://lieftingfit.sportbitapp.nl/web/nl/events"
+      },
       {
         id: "coachboard", label: "Coachboard", sub: "Sportbit · Presentatie-modus",
         icon: "present", accent: "green", cast: true, contextMode: "today",
@@ -245,6 +255,7 @@
     if (cfg.rosterAliases && typeof cfg.rosterAliases === "object") base.rosterAliases = cfg.rosterAliases;
     if (Array.isArray(cfg.rooms) && cfg.rooms.length) base.rooms = cfg.rooms;
     if (typeof cfg.titlebarAutoHide === "boolean") base.titlebarAutoHide = cfg.titlebarAutoHide;
+    if (typeof cfg.autoSelectType === "boolean") base.autoSelectType = cfg.autoSelectType;
     if (base.classTypes.indexOf(base.selectedType) < 0) base.selectedType = base.classTypes[0];
     return base;
   }
@@ -278,6 +289,10 @@
   }
   // Words that identify no class on their own. A base of "The" would happily
   // match any tile containing it.
+  function normType(s) {
+    return String(s == null ? "" : s).replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
   var BASE_STOPWORDS = ["the", "de", "het", "een", "van", "voor", "en", "zaal"];
   function typeBaseOf(type) {
     var first = String(type || "").split(/[\s(\/-]+/)[0] || "";
@@ -315,16 +330,23 @@
   }
 
   function runMacro(s) {
-    toast("Bezig: " + s.label + " openen…");
+    showBusy(s.label + " openen…");
     // Goes through runTool, not runMacro, so the tile gets the same
     // "is there actually a class?" probe as the titlebar buttons. runMacro
     // would navigate this tab first and only discover the problem afterwards.
     chrome.runtime.sendMessage(
       { action: "runTool", tool: s.id },
       function (res) {
-        if (chrome.runtime.lastError) { toast("Kon de helper niet starten"); return; }
-        if (!res) { toast("Geen antwoord van de helper"); return; }
-        if (res.ok) { toast("✓ " + s.label + " geopend"); return; }
+        // Every path below must drop the cover — an overlay left up after a
+        // failure would look like a freeze.
+        if (chrome.runtime.lastError) { hideBusy(); toast("Kon de helper niet starten"); return; }
+        if (!res) { hideBusy(); toast("Geen antwoord van de helper"); return; }
+        if (res.ok) {
+          hideBusy();
+          toast(res.klas ? "✓ " + res.klas + (res.start ? " " + res.start : "") : "✓ " + s.label + " geopend");
+          return;
+        }
+        hideBusy();
         // No class of this type today: nothing was opened, so explain it
         // properly in a dialog rather than a toast that slides away.
         if (res.noClass) { showNoClass(res.type || config.selectedType, s.label, res.filterName); return; }
@@ -379,6 +401,85 @@
     show("#noClassModal");
   }
 
+  // ----- Busy cover -----
+  function showBusy(label) {
+    var b = $("#busy");
+    if (!b) return;
+    $("#busyText").textContent = label || "Bezig…";
+    b.hidden = false;
+  }
+  function hideBusy() { var b = $("#busy"); if (b) b.hidden = true; }
+
+  // ----- Nu / Hierna -----
+  //
+  // Turns the dashboard into something worth leaving on screen: the trainer can
+  // see at a glance what is running and what is next, without opening anything.
+  var dayCache = null;
+
+  function refreshDayInfo(cb) {
+    if (!IS_EXT) { if (cb) cb(null); return; }
+    try {
+      chrome.runtime.sendMessage({ action: "dayInfo", type: config.selectedType }, function (res) {
+        if (chrome.runtime.lastError) { if (cb) cb(null); return; }
+        dayCache = res && res.ok ? res : null;
+        renderNowNext();
+        renderTiles();          // the "Nu bezig" tile depends on this too
+        if (cb) cb(dayCache);
+      });
+    } catch (e) { if (cb) cb(null); }
+  }
+
+  function renderNowNext() {
+    var box = $("#nowNext");
+    if (!box) return;
+    if (!IS_EXT || !dayCache) { box.hidden = true; return; }
+    var ft = dayCache.forType;
+    box.hidden = false;
+    box.innerHTML = "";
+
+    var lead = el("div", { "class": "nn-lead" },
+      '<span class="nn-type">' + escapeHtml(config.selectedType) + "</span>");
+    box.appendChild(lead);
+
+    function slot(kind, ev) {
+      var d = el("div", { "class": "nn-slot nn-" + kind });
+      if (!ev) {
+        d.innerHTML = '<span class="nn-k">' + (kind === "now" ? "Nu" : "Hierna") + "</span>" +
+                      '<span class="nn-empty">—</span>';
+        return d;
+      }
+      d.innerHTML = '<span class="nn-k">' + (kind === "now" ? "Nu" : "Hierna") + "</span>" +
+                    '<span class="nn-t">' + escapeHtml(ev.start) + "</span>" +
+                    '<span class="nn-n">' + escapeHtml(ev.titel) + "</span>" +
+                    (ev.ruimte ? '<span class="nn-r">' + escapeHtml(ev.ruimte) + "</span>" : "");
+      d.classList.add("nn-clickable");
+      d.addEventListener("click", function () { openClass(ev); });
+      return d;
+    }
+
+    if (!ft || !ft.count) {
+      box.appendChild(el("div", { "class": "nn-none" },
+        "Vandaag geen les van dit type in het rooster."));
+    } else {
+      box.appendChild(slot("now", ft.current));
+      box.appendChild(slot("next", ft.next));
+    }
+
+    if (dayCache.filterName) {
+      box.appendChild(el("div", { "class": "nn-warn" },
+        "Rooster staat op " + escapeHtml(dayCache.filterName)));
+    }
+  }
+
+  function openClass(ev) {
+    if (!ev || !IS_EXT) return;
+    showBusy(ev.titel + " " + ev.start + " openen…");
+    chrome.runtime.sendMessage({ action: "openClass", id: ev.id }, function () {
+      void chrome.runtime.lastError;
+      hideBusy();
+    });
+  }
+
   var toastTimer;
   function toast(msg) {
     var t = $("#toast");
@@ -423,7 +524,14 @@
       if (hasMacro) badge = '<span class="tile-cast tile-macro">' + ICONS.bolt + " 1-klik dieplink</span>";
       else if (s.cast) badge = '<span class="tile-cast">' + ICONS.cast + " Casten naar TV</span>";
       var contextChip = "";
-      if (s.contextMode === "today") contextChip = '<span class="tile-context">Vandaag · ' + escapeHtml(config.selectedType) + "</span>";
+      if (s.id === "nubezig") {
+        // Show the class this button would actually open, so it is never a
+        // leap of faith.
+        var t0 = dayCache && (dayCache.anyCurrent || dayCache.anyNext);
+        contextChip = '<span class="tile-context">' +
+          (t0 ? escapeHtml(t0.titel) + " · " + escapeHtml(t0.start) : "Niets gevonden") + "</span>";
+      }
+      else if (s.contextMode === "today") contextChip = '<span class="tile-context">Vandaag · ' + escapeHtml(config.selectedType) + "</span>";
       else if (s.contextMode === "week") contextChip = '<span class="tile-context">Deze week · ' + escapeHtml(config.selectedType) + "</span>";
       var hasRosterPicker = Array.isArray(s.rosterOptions) && s.rosterOptions.length;
       tile.innerHTML =
@@ -439,6 +547,18 @@
         "</div>";
 
       function activate(e) {
+        // "Nu bezig" resolves against live roster data rather than a macro.
+        if (s.id === "nubezig" && IS_EXT) {
+          if (e) e.preventDefault();
+          var target = dayCache && (dayCache.anyCurrent || dayCache.anyNext);
+          if (target) { openClass(target); return; }
+          refreshDayInfo(function (d) {
+            var t = d && (d.anyCurrent || d.anyNext);
+            if (t) openClass(t);
+            else toast("Er draait nu niets en er volgt vandaag niets meer.");
+          });
+          return;
+        }
         if (hasMacro && IS_EXT) { if (e) e.preventDefault(); runMacro(s); return; }
         if (hasMacro && !IS_EXT) { toast("Installeer de Chrome-extensie voor de 1-klik dieplink — nu open ik de startpagina"); return; }
         if (fallbackUrl && IS_EXT) { if (e) e.preventDefault(); openUrl(fallbackUrl); return; }
@@ -597,6 +717,16 @@
       "Menubalk automatisch verbergen (schuift weg; kom met de muis naar de bovenrand). " +
       "De balk staat óók op de TV, dus dit houdt het Coachboard vrij."));
     rm.appendChild(ahWrap);
+
+    var asWrap = el("label", { "class": "set-check" });
+    var as = el("input", { type: "checkbox" });
+    as.checked = !!config.autoSelectType;
+    as.addEventListener("change", function () { config.autoSelectType = as.checked; });
+    asWrap.appendChild(as);
+    asWrap.appendChild(el("span", null,
+      "Lestype automatisch kiezen bij openen — zet het actieve lestype op de les die " +
+      "nu draait of zo begint. Handig als je vlak voor je les binnenkomt."));
+    rm.appendChild(asWrap);
     body.appendChild(rm);
 
     // Shortcuts
@@ -906,8 +1036,37 @@
     // even after the Rooster tile narrows the view to one zaal.
     if (IS_EXT) {
       try {
-        chrome.runtime.sendMessage({ action: "warmRoster" }, function () { void chrome.runtime.lastError; });
+        chrome.runtime.sendMessage({ action: "warmRoster" }, function () {
+          void chrome.runtime.lastError;
+          refreshDayInfo(function (d) {
+            // A coach arriving at 17:55 wants the 18:00 class, not whatever was
+            // left selected yesterday. Preselect what is running or starting
+            // next — but only on arrival, so it never yanks the dropdown out
+            // from under someone who has just chosen deliberately.
+            if (!config.autoSelectType) return;
+            if (!d || !d.suggestTitle) return;
+            var match = null;
+            config.classTypes.forEach(function (t) {
+              if (!match && normType(t) === normType(d.suggestTitle)) match = t;
+            });
+            // Fall back to an alias pointing at the roster's name.
+            if (!match) {
+              Object.keys(config.rosterAliases || {}).forEach(function (k) {
+                if (!match && normType(config.rosterAliases[k]) === normType(d.suggestTitle)) match = k;
+              });
+            }
+            if (match && match !== config.selectedType) {
+              config.selectedType = match;
+              saveConfig(config);
+              renderAll();
+              refreshDayInfo();
+              toast("Lestype automatisch op " + match);
+            }
+          });
+        });
       } catch (e) {}
+      // Keep Nu/Hierna honest as classes roll over.
+      setInterval(function () { refreshDayInfo(); }, 60000);
     }
     tickClock();
     setInterval(tickClock, 1000 * 15);

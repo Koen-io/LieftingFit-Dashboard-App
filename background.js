@@ -58,6 +58,21 @@ if (IS_EXTENSION) {
       });
       return true;
     }
+    if (msg.action === "amIBusy") {
+      isBusy(tabId).then(function (v) { sendResponse({ busy: !!v, label: v ? v.label : "" }); });
+      return true;
+    }
+    if (msg.action === "dayInfo") {
+      dayInfo(msg.type).then(sendResponse).catch(function () { sendResponse({ ok: false }); });
+      return true;
+    }
+    if (msg.action === "openClass") {
+      // Straight to a known coachboard id — used by "Nu bezig" and "Volgende les".
+      openClassById(msg.id, tabId).then(sendResponse).catch(function (e) {
+        sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
+      });
+      return true;
+    }
     if (msg.action === "warmRoster") {
       // Snapshot today's full roster while the session is still unfiltered, so
       // a later check made after the Rooster tile narrows the location is still
@@ -131,6 +146,47 @@ async function goDashboard(tabId) {
   return { ok: true };
 }
 
+/* ---------------- "Bezig…" state ----------------
+ * A macro navigates the tab and then replays clicks, so the trainer would
+ * otherwise watch menus opening and dropdowns changing by themselves. A cover
+ * screen hides that — but it cannot simply live in the page, because the very
+ * first thing a macro does is navigate away and destroy it.
+ *
+ * So the state lives here, keyed by tab. Every injected titlebar asks "is this
+ * tab busy?" on load and re-draws the cover if so; the background clears it
+ * when the macro finishes. storage.session survives the service worker being
+ * torn down mid-macro.
+ */
+async function getBusyMap() {
+  try { return (await chrome.storage.session.get("busy")).busy || {}; }
+  catch (e) { return {}; }
+}
+async function setBusy(tabId, label) {
+  if (tabId == null) return;
+  var map = await getBusyMap();
+  map[String(tabId)] = { label: label || "Bezig…", since: Date.now() };
+  try { await chrome.storage.session.set({ busy: map }); } catch (e) {}
+}
+async function clearBusy(tabId) {
+  if (tabId == null) return;
+  var map = await getBusyMap();
+  delete map[String(tabId)];
+  try { await chrome.storage.session.set({ busy: map }); } catch (e) {}
+  // Tell the page that is showing the cover to drop it. It may not exist yet
+  // (still loading) — the content script also asks on load, so this is just the
+  // fast path.
+  try { chrome.tabs.sendMessage(tabId, { action: "busyDone" }, function () { void chrome.runtime.lastError; }); } catch (e) {}
+}
+async function isBusy(tabId) {
+  if (tabId == null) return null;
+  var map = await getBusyMap();
+  var v = map[String(tabId)];
+  if (!v) return null;
+  // Safety valve: never trap a trainer behind a cover that outlived its macro.
+  if (Date.now() - v.since > 30000) { await clearBusy(tabId); return null; }
+  return v;
+}
+
 /* The titlebar lives in a content script, which has no access to the dashboard
  * page's localStorage. app.js mirrors its config into chrome.storage.local so
  * the background can resolve a tool id to its macro on the titlebar's behalf. */
@@ -179,9 +235,65 @@ async function fetchTodayRoster() {
 function normName(s) {
   return String(s == null ? "" : s).replace(/ /g, " ").replace(/\s+/g, " ").trim().toLowerCase();
 }
+// `start` arrives as a full ISO stamp ("2026-07-20T18:00:00+02:00"); prefer the
+// time right after the T so a date component can never be misread as a clock.
 function startMinutes(e) {
-  var m = /(\d{1,2}):(\d{2})/.exec(String(e.start || ""));
+  var s = String(e.start || "");
+  var m = /T(\d{2}):(\d{2})/.exec(s) || /(\d{1,2}):(\d{2})/.exec(s);
   return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+}
+function endMinutes(e) {
+  var s = String(e.eind || "");
+  var m = /T(\d{2}):(\d{2})/.exec(s) || /(\d{1,2}):(\d{2})/.exec(s);
+  if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  var st = startMinutes(e);
+  return st == null ? null : st + 60;      // assume an hour if the API omits it
+}
+function nowMinutes() {
+  var d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+}
+function hhmm(mins) {
+  if (mins == null) return "";
+  function p(n) { return (n < 10 ? "0" : "") + n; }
+  return p(Math.floor(mins / 60)) + ":" + p(mins % 60);
+}
+
+// Every class of this type today, in start order.
+function classesOfType(events, ctx) {
+  var wanted = [ctx.typeRoster, ctx.typeBase].map(normName).filter(Boolean);
+  for (var w = 0; w < wanted.length; w++) {
+    var hits = events.filter(function (e) { return normName(e.titel) === wanted[w]; });
+    if (hits.length) {
+      return hits.slice().sort(function (a, b) { return (startMinutes(a) || 0) - (startMinutes(b) || 0); });
+    }
+  }
+  return [];
+}
+
+// What is running right now, and what follows it. `list` must be start-sorted.
+function nowAndNext(list) {
+  var n = nowMinutes(), current = null, next = null;
+  for (var i = 0; i < list.length; i++) {
+    var s = startMinutes(list[i]);
+    if (s == null) continue;
+    var en = endMinutes(list[i]);
+    if (s <= n && n < en) { current = list[i]; continue; }
+    if (s > n && !next) next = list[i];
+  }
+  return { current: current, next: next };
+}
+
+// Trimmed for messaging — never ship participant data to a content script.
+function slimEvent(e) {
+  if (!e) return null;
+  return {
+    id: e.id,
+    titel: e.titel,
+    start: hhmm(startMinutes(e)),
+    eind: hhmm(endMinutes(e)),
+    ruimte: e.ruimte || ""
+  };
 }
 
 /* Same rules as clickNearest, applied to data instead of DOM: the class NAME
@@ -269,6 +381,62 @@ async function getTodayEvents() {
 }
 
 
+/* Everything the dashboard and titlebar need to show "what's on now".
+ * `type` is optional: without it, answers for the gym as a whole ("Nu bezig"). */
+async function dayInfo(type) {
+  var cfg = await loadConfigForBackground();
+  var day = await getTodayEvents();
+  if (!day) return { ok: false };
+
+  var all = day.events.slice().sort(function (a, b) {
+    return (startMinutes(a) || 0) - (startMinutes(b) || 0);
+  });
+  var anyNow = nowAndNext(all);
+
+  var forType = null;
+  if (type && cfg) {
+    var aliases = cfg.rosterAliases || {};
+    var ctx = {
+      typeRoster: aliases[type] || type,
+      typeBase: (function () {
+        var first = String(type).split(/[\s(\/-]+/)[0] || "";
+        if (first.length < 3) return "";
+        if (["the", "de", "het", "een", "van", "voor", "en", "zaal"].indexOf(first.toLowerCase()) >= 0) return "";
+        return first;
+      })()
+    };
+    var list = classesOfType(day.events, ctx);
+    var nn = nowAndNext(list);
+    forType = {
+      count: list.length,
+      current: slimEvent(nn.current),
+      next: slimEvent(nn.next),
+      all: list.map(slimEvent)
+    };
+  }
+
+  // Which type starts soonest — used to preselect Actief lestype on arrival.
+  var upcoming = all.filter(function (e) { return (startMinutes(e) || 0) >= nowMinutes(); });
+  return {
+    ok: true,
+    complete: day.complete,
+    filterName: day.filterName || null,
+    anyCurrent: slimEvent(anyNow.current),
+    anyNext: slimEvent(anyNow.next),
+    suggestTitle: (anyNow.current && anyNow.current.titel) || (upcoming[0] && upcoming[0].titel) || null,
+    forType: forType
+  };
+}
+
+async function openClassById(id, tabId) {
+  if (tabId == null || !id) return { ok: false, error: "Geen les." };
+  await setBusy(tabId, "Coachboard openen…");
+  await chrome.tabs.update(tabId, { url: "https://lieftingfit.sportbitapp.nl/cbm/coachboard/" + id + "/" });
+  await waitForTabComplete(tabId, 20000);
+  await clearBusy(tabId);
+  return { ok: true };
+}
+
 async function runTool(toolId, tabId) {
   if (tabId == null) return { ok: false, error: "Geen tab." };
   var cfg = await loadConfigForBackground();
@@ -304,10 +472,13 @@ async function runTool(toolId, tabId) {
       // Coachboard: the event id IS the coachboard id, so the room tab goes
       // straight there — one navigation, no roster, no extra tab.
       if (hit && toolId === "coachboard") {
+        await setBusy(tabId, "Coachboard openen…");
         await chrome.tabs.update(tabId, {
           url: "https://lieftingfit.sportbitapp.nl/cbm/coachboard/" + hit.id + "/"
         });
-        return { ok: true, acted: 1, klas: hit.titel, start: hit.start };
+        await waitForTabComplete(tabId, 20000);
+        await clearBusy(tabId);
+        return { ok: true, acted: 1, klas: hit.titel, start: hhmm(startMinutes(hit)) };
       }
       // Dexos has no equivalent deep link, so it still replays — but only now
       // that we know the class exists.
@@ -323,7 +494,14 @@ async function runTool(toolId, tabId) {
   }
 
   if (s.macro && Array.isArray(s.macro.steps) && s.macro.steps.length) {
-    return await runMacro({ startUrl: s.macro.startUrl || s.url, steps: s.macro.steps, context: ctx }, tabId);
+    // Cover the tab for the whole replay: the trainer should never watch menus
+    // open and dropdowns change by themselves.
+    await setBusy(tabId, s.label ? s.label + " openen…" : "Bezig…");
+    try {
+      return await runMacro({ startUrl: s.macro.startUrl || s.url, steps: s.macro.steps, context: ctx }, tabId);
+    } finally {
+      await clearBusy(tabId);
+    }
   }
   if (!s.url) return { ok: false, error: "Geen URL voor " + toolId };
   await chrome.tabs.update(tabId, { url: s.url });
@@ -431,7 +609,12 @@ function waitForTabComplete(tabId, timeoutMs) {
    self-contained (no external references). */
 function replayInPage(steps, context) {
   return new Promise(function (resolve) {
-    var STEP_TIMEOUT = 15000;
+    // 15s per step made every failure feel like a hang — a type with no class
+    // could take a minute to say so. The roster is now checked up front via the
+    // API, so a step that cannot find its element is genuinely missing rather
+    // than slow. 5s still covers the Dexos grid's AJAX reload (~2-3s observed)
+    // with headroom.
+    var STEP_TIMEOUT = 5000;
     var SETTLE = 450;
     context = context || {};
 
