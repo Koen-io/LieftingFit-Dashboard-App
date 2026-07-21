@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LieftingFit Trainer Dashboard",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Snelkoppelingen-dashboard met één-klik dieplinks (Type B) voor de trainers van LieftingFit.",
   "action": {
     "default_title": "LieftingFit Dashboard openen",

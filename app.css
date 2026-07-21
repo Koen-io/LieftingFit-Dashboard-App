@@ -509,3 +509,23 @@ body::before {
    rounded boxes. Make hidden mean hidden. */
 [hidden] { display: none !important; }
 .nn-type-hint { color: var(--muted-2); font-size: 12.5px; margin-left: 4px; }
+
+/* Labelled variant of .icon-btn — auto width instead of the 46px square, so the
+   label sets the size. Kept in the same visual family as the icon buttons
+   beside it rather than styled as a separate control. */
+.icon-btn-wide {
+  width: auto;
+  gap: 9px;
+  padding: 0 16px;
+  grid-auto-flow: column;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.icon-btn-wide svg { width: 19px; height: 19px; }
+/* On narrow screens the icon alone is enough — the row must not wrap. */
+@media (max-width: 820px) {
+  .icon-btn-wide { width: 46px; padding: 0; }
+  .icon-btn-wide span { display: none; }
+}

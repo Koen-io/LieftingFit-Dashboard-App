@@ -511,6 +511,26 @@ body::before {
 [hidden] { display: none !important; }
 .nn-type-hint { color: var(--muted-2); font-size: 12.5px; margin-left: 4px; }
 
+/* Labelled variant of .icon-btn — auto width instead of the 46px square, so the
+   label sets the size. Kept in the same visual family as the icon buttons
+   beside it rather than styled as a separate control. */
+.icon-btn-wide {
+  width: auto;
+  gap: 9px;
+  padding: 0 16px;
+  grid-auto-flow: column;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.icon-btn-wide svg { width: 19px; height: 19px; }
+/* On narrow screens the icon alone is enough — the row must not wrap. */
+@media (max-width: 820px) {
+  .icon-btn-wide { width: 46px; padding: 0; }
+  .icon-btn-wide span { display: none; }
+}
+
 </style>
 <div id="app">
   <header class="topbar">
@@ -529,8 +549,12 @@ body::before {
 
     <div class="topbar-actions">
       <span class="room-badge" id="roomBadge" hidden></span>
-      <button class="icon-btn" id="btnFeedback" title="Feedback sturen" aria-label="Feedback sturen">
+      <!-- Labelled rather than icon-only: trainers should not have to guess
+           what a speech bubble does, and this is the one control that invites
+           them to report something. -->
+      <button class="icon-btn icon-btn-wide" id="btnFeedback" title="Feedback &amp; vragen" aria-label="Feedback en vragen">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Feedback &amp; Vragen</span>
       </button>
       <button class="icon-btn" id="btnCastHelp" title="Casten naar de TV (?)" aria-label="Cast-hulp">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20h.01M2 16a6 6 0 0 1 6 6M2 12a10 10 0 0 1 10 10M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-6"/></svg>
