@@ -242,13 +242,38 @@
   }
   function barTopMin() { return (document.getElementById(BAR_ID) && !autoHide) ? 58 : 6; }
 
+  /* Fall back to reading the class out of the Groepsevent popup behind the
+   * dialog. The background only knows the class when the trainer came via the
+   * Leden-toevoegen tile; reaching the dialog by hand through Dexos otherwise
+   * left the bar saying "les", which tells nobody anything. */
+  function classFromPopup() {
+    var pops = document.querySelectorAll("div.inner_overlay");
+    for (var i = 0; i < pops.length; i++) {
+      var txt = (pops[i].textContent || "").replace(/\s+/g, " ").trim();
+      if (!/^Groepsevent/i.test(txt)) continue;
+      var type = /Eventtype\s+(.+?)\s+Trainer/i.exec(txt);
+      var tijd = /(?:^|\s)Tijd\s+(\d{1,2}:\d{2})/i.exec(txt);
+      var eind = /Eindtijd\s+(\d{1,2}:\d{2})/i.exec(txt);
+      return {
+        titel: type ? type[1].trim() : null,
+        start: tijd ? tijd[1] + (eind ? "–" + eind[1] : "") : null
+      };
+    }
+    return { titel: null, start: null };
+  }
+
   function setFocusLabel(titel, start) {
     var host = document.getElementById(FOCUS_ID);
     if (!host) return;
+    if (!titel) {
+      var f = classFromPopup();
+      titel = f.titel; if (!start) start = f.start;
+    }
     var t = host.querySelector(".lf-focus-title");
     var s = host.querySelector(".lf-focus-sub");
-    if (t) t.textContent = "Leden toevoegen — " + (titel || "les");
-    if (s) s.textContent = start ? start : "";
+    // No class name at all? Then say nothing extra rather than "— les".
+    if (t) t.textContent = titel ? "Leden toevoegen — " + titel : "Leden toevoegen";
+    if (s) s.textContent = start || "";
   }
 
   function syncFocus() {
