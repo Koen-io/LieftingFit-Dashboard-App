@@ -458,6 +458,8 @@
   // next step. Deliberately a dialog, not a toast: a toast that vanishes after
   // 2.6s is the wrong shape for "the thing you asked for does not exist today".
   function showNoClass(type, label, rosterFilter, reason) {
+    $("#noClassTitle").textContent = "Geen les gevonden";
+    $("#noClassOk").textContent = "Ander lestype kiezen";
     var weekday = new Date().toLocaleDateString("nl-NL", { weekday: "long" });
     var body = $("#noClassBody");
     body.innerHTML =
@@ -1066,6 +1068,48 @@
     return 0;
   }
 
+  // The extension cannot write into the repo folder, so its own checks are
+  // recorded here. Settings shows whichever ran most recently — the nightly
+  // script or this — which is why the line used to look frozen after pressing
+  // the button: only the script ever wrote a timestamp.
+  var LASTCHECK_KEY = "lastUpdateCheck";
+  function recordCheck(result) {
+    if (!IS_EXT) return;
+    var stamp = new Date().toLocaleString("nl-NL",
+      { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    try {
+      chrome.storage.local.set({ lastUpdateCheck: { checked: stamp, result: result } }, function () {
+        void chrome.runtime.lastError;
+        renderUpdateStatus();
+      });
+    } catch (e) {}
+  }
+
+  // Shows whichever check ran most recently: the nightly script (which writes
+  // .update-status into the folder) or the in-app button (chrome.storage).
+  function renderUpdateStatus() {
+    var n = $("#updStatus");
+    if (!n) return;
+    if (!IS_EXT) { n.textContent = ""; return; }
+
+    function paint(scriptSt, appSt) {
+      var lines = [];
+      if (appSt && appSt.checked) lines.push("Laatst gecontroleerd: " + appSt.checked + " — " + (appSt.result || ""));
+      if (scriptSt && scriptSt.checked) lines.push("Automatische update: " + scriptSt.checked + " — " + (scriptSt.result || ""));
+      else lines.push("Automatische update: nog niet gedraaid (installeer tools/install-updater.command).");
+      n.innerHTML = lines.map(escapeHtml).join("<br>");
+    }
+
+    chrome.storage.local.get("lastUpdateCheck", function (r) {
+      void chrome.runtime.lastError;
+      var appSt = r && r.lastUpdateCheck;
+      fetch(chrome.runtime.getURL(".update-status"), { cache: "no-store" })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (scriptSt) { paint(scriptSt, appSt); })
+        .catch(function () { paint(null, appSt); });
+    });
+  }
+
   function checkForUpdates(manual) {
     if (!IS_EXT) { if (manual) toast("Alleen beschikbaar in de extensie"); return; }
     var mine = chrome.runtime.getManifest().version;   // version Chrome LOADED
@@ -1080,6 +1124,7 @@
       .then(function (r) { return r.json(); })
       .then(function (disk) {
         if (disk && disk.version && cmpVersions(disk.version, mine) > 0) {
+          recordCheck("update klaar (" + disk.version + ") — herstart Chrome");
           showRestartNeeded(mine, disk.version);
           return null;                                  // stop here
         }
@@ -1089,15 +1134,24 @@
         if (!j) return;                                 // already handled above
         var theirs = j.version;
         if (!theirs) throw new Error("geen versie");
-        if (cmpVersions(theirs, mine) > 0) showUpdateAvailable(mine, theirs);
-        else if (manual) toast("Je hebt de nieuwste versie (" + mine + ")");
+        if (cmpVersions(theirs, mine) > 0) {
+          recordCheck("versie " + theirs + " beschikbaar");
+          showUpdateAvailable(mine, theirs);
+        } else {
+          recordCheck("actueel (" + mine + ")");
+          if (manual) toast("Je hebt de nieuwste versie (" + mine + ")");
+        }
       })
-      .catch(function () { if (manual) toast("Kon niet controleren op updates"); });
+      .catch(function () {
+        recordCheck("controle mislukt");
+        if (manual) toast("Kon niet controleren op updates");
+      });
   }
 
   // The update is already on the laptop; Chrome just has not loaded it.
   function showRestartNeeded(mine, ready) {
     $("#noClassTitle").textContent = "Update klaar";
+    $("#noClassOk").textContent = "Begrepen";
     $("#noClassBody").innerHTML =
       '<p class="noclass-lead">Versie <b>' + escapeHtml(ready) + "</b> staat klaar op deze laptop " +
       "(je gebruikt nu " + escapeHtml(mine) + ").</p>" +
@@ -1111,6 +1165,7 @@
   function showUpdateAvailable(mine, theirs) {
     var body = $("#noClassBody");
     $("#noClassTitle").textContent = "Update beschikbaar";
+    $("#noClassOk").textContent = "Begrepen";
     body.innerHTML =
       '<p class="noclass-lead">Er is een nieuwere versie: <b>' + escapeHtml(theirs) + "</b> " +
       "(jij hebt " + escapeHtml(mine) + ").</p>" +
@@ -1164,23 +1219,8 @@
       "Versie " + escapeHtml(IS_EXT ? chrome.runtime.getManifest().version : "—")));
     // Proof the nightly updater is alive. It is silent when there is nothing to
     // do, which reads exactly like "broken" — so show when it last looked.
-    var lastLine = el("div", { "class": "help-text", id: "updStatus" }, "");
-    up.appendChild(lastLine);
-    if (IS_EXT) {
-      fetch(chrome.runtime.getURL(".update-status"), { cache: "no-store" })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (st) {
-          var n = $("#updStatus");
-          if (!n) return;
-          n.textContent = st && st.checked
-            ? "Automatische update: laatst gecontroleerd " + st.checked + " — " + (st.result || "")
-            : "Automatische update: nog niet gedraaid (installeer tools/install-updater.command).";
-        })
-        .catch(function () {
-          var n = $("#updStatus");
-          if (n) n.textContent = "Automatische update: nog niet gedraaid (installeer tools/install-updater.command).";
-        });
-    }
+    up.appendChild(el("div", { "class": "help-text", id: "updStatus" }, ""));
+    renderUpdateStatus();
 
     var upRow = el("div", { "class": "set-row-btns" });
     var btnUpd = el("button", { "class": "btn btn-ghost", "type": "button" }, "Controleer op updates");

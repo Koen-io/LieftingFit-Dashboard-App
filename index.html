@@ -125,7 +125,10 @@
     <div class="modal-body" id="noClassBody"><!-- injected --></div>
     <div class="modal-foot">
       <div class="foot-right" style="margin-left:auto">
-        <button class="btn btn-primary" data-close>Ander lestype kiezen</button>
+        <!-- Label is set per use: this dialog is shared between "no class
+             today" (where picking another type is the next step) and the
+             update notice (where it is just an acknowledgement). -->
+        <button class="btn btn-primary" id="noClassOk" data-close>Ander lestype kiezen</button>
       </div>
     </div>
   </div>

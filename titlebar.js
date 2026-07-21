@@ -158,16 +158,26 @@
   var FOCUS_ID = "lf-focus";
   var focusRO = null;
 
+  // The SMALLEST box that still starts with "Deelnemer toevoegen".
+  //
+  // Document order is not reliable here: the dialog sits inside nested
+  // .inner_overlay wrappers, and taking the last one could return an outer
+  // shell that spans most of the page — which is why the mask looked loose and
+  // the titlebar ended up below everything. Smallest-area is what "just this
+  // dialog" actually means.
   function findDeelnemerDialog() {
-    var nodes = document.querySelectorAll("div.inner_overlay");
-    // Last match wins: the newest popup is the innermost one.
-    for (var i = nodes.length - 1; i >= 0; i--) {
-      var r = nodes[i].getBoundingClientRect();
-      if (r.width < 120 || r.height < 80) continue;
-      var t = (nodes[i].textContent || "").replace(/\s+/g, " ").trim();
-      if (/^Deelnemer toevoegen/i.test(t)) return nodes[i];
+    var best = null, bestArea = Infinity;
+    var nodes = document.querySelectorAll("div, section, form");
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var t = (el.textContent || "").replace(/\s+/g, " ").trim();
+      if (!/^Deelnemer toevoegen/i.test(t)) continue;
+      var r = el.getBoundingClientRect();
+      if (r.width < 200 || r.height < 100) continue;   // a label, not the box
+      var area = r.width * r.height;
+      if (area < bestArea) { bestArea = area; best = el; }
     }
-    return null;
+    return best;
   }
 
   function focusEls() {
@@ -214,11 +224,11 @@
     set(".lf-mask-left",   { top: top + "px", left: "0px", width: left + "px", height: (bottom - top) + "px" });
     set(".lf-mask-right",  { top: top + "px", left: right + "px", width: Math.max(0, vw - right) + "px", height: (bottom - top) + "px" });
 
-    // Titlebar sits directly above the box, or just below the top edge if the
-    // dialog is already near the top of the screen.
+    // Titlebar always sits ABOVE the box. If there is not enough room it is
+    // clamped to just under the room titlebar — never pushed to the bottom of
+    // the screen, which is where it ended up before and read as "detached".
     var barH = 46;
-    var barTop = top - barH - 6;
-    if (barTop < barTopMin()) barTop = Math.min(bottom + 6, vh - barH);
+    var barTop = Math.max(barTopMin(), top - barH - 6);
     set(".lf-focus-bar", {
       top: barTop + "px", left: left + "px",
       width: Math.max(240, right - left) + "px", height: barH + "px"
