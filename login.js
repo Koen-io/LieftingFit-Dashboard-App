@@ -63,6 +63,39 @@
     return typed[0] || null;
   }
 
+  /* The form is NOT on /web/nl/login.
+   *
+   * That URL shows a chooser — "Inloggen voor leden", "Lid worden", "Proefles
+   * volgen" — with no password field anywhere. The script therefore found
+   * nothing and correctly did nothing, which is exactly why auto-login appeared
+   * to be broken: it never reached a form at all. Clicking through is the
+   * missing step.
+   */
+  function openLoginForm() {
+    if (passwordFields().length) return false;          // already on the form
+    var link = [].slice.call(document.querySelectorAll("a,button,[role=button]"))
+      .filter(visible)
+      .filter(function (e) { return /inloggen voor leden/i.test(e.textContent || ""); })[0];
+    if (!link) return false;
+    var o = { bubbles: true, cancelable: true, view: window };
+    ["pointerover", "mouseover", "pointerdown", "mousedown", "pointerup", "mouseup"]
+      .forEach(function (t) { try { link.dispatchEvent(new MouseEvent(t, o)); } catch (e) {} });
+    try { link.click(); } catch (e) {}
+    return true;                                        // form will render shortly
+  }
+
+  /* "Inlog onthouden" is unchecked by default, so every session expired on its
+   * own schedule and the trainer met the login page again. Ticking it is the
+   * single biggest reason they should now stay logged in. */
+  function rememberMe() {
+    var cb = document.querySelector('input[type="checkbox"]');
+    if (!cb || cb.checked) return;
+    var lab = cb.closest("mat-checkbox") || cb.closest("label") || cb.parentElement;
+    var txt = (lab && lab.textContent || "").toLowerCase();
+    if (txt && !/onthoud|remember|ingelogd/i.test(txt)) return;   // not that box
+    try { cb.click(); } catch (e) {}
+  }
+
   // Guard against acting on anything that is not a sign-in form.
   function looksLikeLogin() {
     var pws = passwordFields();
@@ -125,9 +158,18 @@
     if (s) { s.textContent = text; s.className = "lf-status" + (bad ? " lf-status-bad" : ""); }
   }
 
+  function onLoginRoute() {
+    return /\/login\b|\/inloggen\b/i.test(location.pathname);
+  }
+
   function tryLogin() {
     var f = looksLikeLogin();
-    if (!f) { clearAttempt(); return; }   // off the login page → guard resets
+    if (!f) {
+      // On the login route but no form yet? Click through the chooser.
+      if (onLoginRoute() && !alreadyAttempted()) openLoginForm();
+      else if (!onLoginRoute()) clearAttempt();   // off the login page → reset
+      return;
+    }
     if (alreadyAttempted()) return;
 
     chrome.storage.local.get(CREDS_KEY, function (r) {
@@ -144,6 +186,7 @@
 
       setNative(f.user, creds.user);
       setNative(f.pw, creds.pass);
+      rememberMe();     // keeps the session alive between shifts
 
       setTimeout(function () {
         if (f.submit) f.submit.click();
