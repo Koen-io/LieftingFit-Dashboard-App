@@ -1123,9 +1123,11 @@
     fetch(chrome.runtime.getURL("manifest.json"), { cache: "no-store" })
       .then(function (r) { return r.json(); })
       .then(function (disk) {
+        // A newer version is already on disk — APPLY it. chrome.runtime.reload()
+        // restarts the extension, which re-reads every file from the folder.
+        // No manual reload, no Chrome restart: the update simply takes effect.
         if (disk && disk.version && cmpVersions(disk.version, mine) > 0) {
-          recordCheck("update klaar (" + disk.version + ") — herstart Chrome");
-          showRestartNeeded(mine, disk.version);
+          applyUpdate(disk.version);
           return null;                                  // stop here
         }
         return fetch(VERSION_URL, { cache: "no-store" }).then(function (r) { return r.json(); });
@@ -1135,8 +1137,11 @@
         var theirs = j.version;
         if (!theirs) throw new Error("geen versie");
         if (cmpVersions(theirs, mine) > 0) {
-          recordCheck("versie " + theirs + " beschikbaar");
-          showUpdateAvailable(mine, theirs);
+          // GitHub is ahead but this laptop has not pulled yet. The updater
+          // runs every 5 minutes, so this resolves itself; say so plainly
+          // instead of sending the trainer to Terminal.
+          recordCheck("versie " + theirs + " wordt opgehaald");
+          showUpdateComing(mine, theirs);
         } else {
           recordCheck("actueel (" + mine + ")");
           if (manual) toast("Je hebt de nieuwste versie (" + mine + ")");
@@ -1146,6 +1151,33 @@
         recordCheck("controle mislukt");
         if (manual) toast("Kon niet controleren op updates");
       });
+  }
+
+  /* Apply an update that is already on disk.
+   *
+   * chrome.runtime.reload() restarts the extension and re-reads its files, so
+   * an unpacked extension CAN update itself in place — no chrome://extensions,
+   * no Chrome restart. The dashboard tab reloads itself a moment later so the
+   * trainer lands on the new version rather than a dead page.
+   */
+  function applyUpdate(newVersion) {
+    recordCheck("bijgewerkt naar " + newVersion);
+    showBusy("Update naar " + newVersion + " wordt toegepast…");
+    // chrome.runtime.reload() also tears down this page, so the tab would be
+    // left on a dead chrome-extension:// URL. Leave a note in storage.local
+    // (which survives the restart) and the service worker reopens this exact
+    // dashboard — same zaal — as soon as it comes back up.
+    try {
+      chrome.storage.local.set({
+        pendingReopen: { url: location.href, at: Date.now() }
+      });
+    } catch (e) {}
+    setTimeout(function () {
+      try { chrome.runtime.reload(); } catch (e) {
+        hideBusy();
+        toast("Bijwerken mislukt — herstart Chrome");
+      }
+    }, 700);
   }
 
   // The update is already on the laptop; Chrome just has not loaded it.
@@ -1162,21 +1194,20 @@
     show("#noClassModal");
   }
 
-  function showUpdateAvailable(mine, theirs) {
-    var body = $("#noClassBody");
-    $("#noClassTitle").textContent = "Update beschikbaar";
+  // GitHub is ahead of this laptop. The updater pulls every 5 minutes and the
+  // dashboard applies it by itself, so this is information, not a task list.
+  function showUpdateComing(mine, theirs) {
+    $("#noClassTitle").textContent = "Update onderweg";
     $("#noClassOk").textContent = "Begrepen";
-    body.innerHTML =
-      '<p class="noclass-lead">Er is een nieuwere versie: <b>' + escapeHtml(theirs) + "</b> " +
-      "(jij hebt " + escapeHtml(mine) + ").</p>" +
-      '<p class="help-text">Bijwerken op deze laptop:</p>' +
-      '<ol class="help-text">' +
-        "<li>Open Terminal en voer uit:<br><code>cd \"/Users/macminiks/Code/LieftingFit Dashboard App\" &amp;&amp; git pull</code></li>" +
-        "<li>Ga naar <code>chrome://extensions</code></li>" +
-        "<li>Klik op <b>⟳</b> bij LieftingFit Trainer Dashboard</li>" +
-      "</ol>";
+    $("#noClassBody").innerHTML =
+      '<p class="noclass-lead">Versie <b>' + escapeHtml(theirs) + "</b> staat klaar op GitHub " +
+      "(jij gebruikt " + escapeHtml(mine) + ").</p>" +
+      '<p class="help-text">Deze laptop haalt hem automatisch op — meestal binnen ' +
+      "vijf minuten. Daarna wordt de update vanzelf toegepast; je hoeft niets te doen.</p>" +
+      '<p class="help-text">Haast? Klik straks nog een keer op <b>Controleer op updates</b>.</p>';
     show("#noClassModal");
   }
+
   function buildSettingsForm() {
     var body = $("#settingsBody");
     body.innerHTML = "";

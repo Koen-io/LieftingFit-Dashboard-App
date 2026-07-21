@@ -101,6 +101,26 @@ if (IS_EXTENSION) {
   });
 }
 
+/* After chrome.runtime.reload() the extension restarts and every extension page
+ * is torn down, leaving its tab on a dead URL. The dashboard writes where it
+ * was just before triggering the update; this reopens it as soon as the worker
+ * comes back. Guarded by a timestamp so an ordinary worker wake-up (which
+ * happens constantly) can never resurrect a stale tab. */
+if (IS_EXTENSION) {
+  (async function reopenAfterUpdate() {
+    try {
+      var r = await chrome.storage.local.get("pendingReopen");
+      var p = r && r.pendingReopen;
+      if (!p || !p.url) return;
+      await chrome.storage.local.remove("pendingReopen");
+      if (Date.now() - (p.at || 0) > 60000) return;       // too old to be ours
+      var tabs = await chrome.tabs.query({ url: chrome.runtime.getURL("index.html") + "*" });
+      if (tabs && tabs.length) await chrome.tabs.update(tabs[0].id, { url: p.url, active: true });
+      else await chrome.tabs.create({ url: p.url, active: true });
+    } catch (e) {}
+  })();
+}
+
 /* ---------------- Room tabs ----------------
  * Chrome casts a whole TAB, so three TVs showing different things need three
  * separate tabs, each cast once. The mapping lives in storage.session (not a

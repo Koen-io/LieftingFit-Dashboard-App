@@ -44,11 +44,13 @@ cat > "$PLIST" <<PLISTEOF
     <key>LF_BRANCH</key> <string>main</string>
   </dict>
   <key>RunAtLoad</key>        <true/>
-  <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key>   <integer>5</integer>
-    <key>Minute</key> <integer>30</integer>
-  </dict>
+  <!-- Every 5 minutes, not nightly. The dashboard can only APPLY an update that
+       is already on disk (chrome.runtime.reload re-reads the folder; it cannot
+       fetch). Keeping the folder within ~5 minutes of GitHub is what makes
+       "Controleer op updates" actually do something, on every laptop. A git
+       fetch with nothing to do is a few KB and finishes in well under a
+       second. -->
+  <key>StartInterval</key>    <integer>300</integer>
   <key>StandardErrorPath</key>
   <string>${HOME}/Library/Logs/lieftingfit-update.err.log</string>
 </dict>
