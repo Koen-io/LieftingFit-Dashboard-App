@@ -1115,7 +1115,12 @@ body::before {
     // "is there actually a class?" probe as the titlebar buttons. runMacro
     // would navigate this tab first and only discover the problem afterwards.
     chrome.runtime.sendMessage(
-      { action: "runTool", tool: s.id },
+      // classId travels WITH the click rather than through the config.
+      // normalize() rebuilds built-in shortcuts from defaults on every load and
+      // only carries a few user fields across, so a class id parked on the
+      // shortcut was silently dropped — the background then saw "no class
+      // chosen". It is per-day state anyway and has no business in saved config.
+      { action: "runTool", tool: s.id, classId: s.selectedClassId || null },
       function (res) {
         // Every path below must drop the cover — an overlay left up after a
         // failure would look like a freeze.
@@ -1129,7 +1134,7 @@ body::before {
         hideBusy();
         // No class of this type today: nothing was opened, so explain it
         // properly in a dialog rather than a toast that slides away.
-        if (res.noClass) { showNoClass(res.type || config.selectedType, s.label, res.filterName); return; }
+        if (res.noClass) { showNoClass(res.type || config.selectedType, s.label, res.filterName, res.reason); return; }
         // A "soft" stop is not a breakage: the page the trainer needs is already
         // open, there just was not one obvious class to jump to. Show the hint on
         // its own — no step number, no alarm.
@@ -1148,12 +1153,17 @@ body::before {
   // Nothing was opened — say why, and make picking another type the obvious
   // next step. Deliberately a dialog, not a toast: a toast that vanishes after
   // 2.6s is the wrong shape for "the thing you asked for does not exist today".
-  function showNoClass(type, label, rosterFilter) {
+  function showNoClass(type, label, rosterFilter, reason) {
     var weekday = new Date().toLocaleDateString("nl-NL", { weekday: "long" });
     var body = $("#noClassBody");
     body.innerHTML =
-      '<p class="noclass-lead">Er staat vandaag (<b>' + escapeHtml(weekday) + '</b>) geen les van het type ' +
-      '<b>' + escapeHtml(type) + '</b> in het rooster.</p>' +
+      // Use the engine's own reason when it gave one. Hard-coding "geen les
+      // vandaag" told trainers a class did not exist when the real problem was
+      // something else entirely — e.g. no class picked in the dropdown yet.
+      '<p class="noclass-lead">' + (reason
+        ? escapeHtml(reason)
+        : "Er staat vandaag (<b>" + escapeHtml(weekday) + "</b>) geen les van het type <b>" +
+          escapeHtml(type) + "</b> in het rooster.") + "</p>" +
       '<p class="help-text">Daarom is <b>' + escapeHtml(label) + '</b> niet geopend — je zou anders op een ' +
       'leeg of verkeerd scherm uitkomen.</p>' +
       // Only one location was visible, so be explicit rather than implying the
@@ -1490,9 +1500,16 @@ body::before {
         ["click", "mousedown", "keydown"].forEach(function (evt) {
           cp.addEventListener(evt, function (e) { e.stopPropagation(); });
         });
+        // Listen on the WHOLE tile, not just .tile-top/.tile-body. Those two
+        // leave the tile's padding and the gap between them dead, which is why
+        // the button appeared to need several clicks. The tile is a <div> here,
+        // so there is no link to suppress — stopping propagation on the select
+        // is enough to keep the dropdown usable.
         tile.classList.add("tile-has-picker");
-        tile.querySelector(".tile-top").addEventListener("click", function (e) { activate(e); });
-        tile.querySelector(".tile-body").addEventListener("click", function (e) { activate(e); });
+        tile.addEventListener("click", function (e) {
+          if (e.target === cp || cp.contains(e.target)) return;
+          activate(e);
+        });
         tile.appendChild(cp);
         grid.appendChild(tile);
         return;                     // handled — skip the generic wiring below
@@ -1519,10 +1536,12 @@ body::before {
           pick.addEventListener(evt, function (e) { e.stopPropagation(); });
         });
 
-        var hitArea = tile.querySelector(".tile-body");
+        // Same reasoning as the class picker above: whole tile is the hit area.
         tile.classList.add("tile-has-picker");
-        tile.querySelector(".tile-top").addEventListener("click", activate);
-        hitArea.addEventListener("click", activate);
+        tile.addEventListener("click", function (e) {
+          if (e.target === pick || pick.contains(e.target)) return;
+          activate(e);
+        });
         tile.appendChild(pick);   // sibling of .tile-body, NOT inside it
       } else {
         tile.addEventListener("click", activate);
@@ -1839,6 +1858,26 @@ body::before {
     var up = el("div", { "class": "set-section" }, "<h3>Onderhoud</h3>");
     up.appendChild(el("div", { "class": "help-text" },
       "Versie " + escapeHtml(IS_EXT ? chrome.runtime.getManifest().version : "—")));
+    // Proof the nightly updater is alive. It is silent when there is nothing to
+    // do, which reads exactly like "broken" — so show when it last looked.
+    var lastLine = el("div", { "class": "help-text", id: "updStatus" }, "");
+    up.appendChild(lastLine);
+    if (IS_EXT) {
+      fetch(chrome.runtime.getURL(".update-status"), { cache: "no-store" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (st) {
+          var n = $("#updStatus");
+          if (!n) return;
+          n.textContent = st && st.checked
+            ? "Automatische update: laatst gecontroleerd " + st.checked + " — " + (st.result || "")
+            : "Automatische update: nog niet gedraaid (installeer tools/install-updater.command).";
+        })
+        .catch(function () {
+          var n = $("#updStatus");
+          if (n) n.textContent = "Automatische update: nog niet gedraaid (installeer tools/install-updater.command).";
+        });
+    }
+
     var upRow = el("div", { "class": "set-row-btns" });
     var btnUpd = el("button", { "class": "btn btn-ghost", "type": "button" }, "Controleer op updates");
     btnUpd.addEventListener("click", function () { checkForUpdates(true); });

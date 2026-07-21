@@ -37,8 +37,38 @@ fi
 LOCAL="$(git rev-parse HEAD 2>/dev/null)"
 REMOTE="$(git rev-parse "origin/$BRANCH" 2>/dev/null)"
 
+# Laat altijd zien DAT er gecontroleerd is. Zonder dit is "stil" niet te
+# onderscheiden van "stuk" — precies de reden dat dit de eerste keer leek te
+# falen terwijl er simpelweg niets te doen was. Het dashboard leest dit bestand
+# en toont het onder Instellingen.
+write_status() {
+  printf '{"checked":"%s","installed":"%s","result":"%s"}\n' \
+    "$(date '+%Y-%m-%d %H:%M')" \
+    "$(python3 -c "import json;print(json.load(open('manifest.json'))['version'])" 2>/dev/null || echo '?')" \
+    "$1" > "$REPO/.update-status" 2>/dev/null || true
+}
+
 if [ "$LOCAL" = "$REMOTE" ]; then
+  write_status "actueel"
   exit 0                      # niets te doen, en geen ruis in het log
+fi
+
+# VEILIGHEID: nooit ongepubliceerd werk weggooien.
+#
+# Dit script doet `reset --hard`, wat op een gym-laptop precies goed is (die is
+# een kopie) maar op een ontwikkelmachine werk kan vernietigen. Staat er iets
+# ongecommit klaar, of zitten we op een andere branch met eigen commits, dan
+# stopt de update en zegt het waarom.
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+  log "OVERGESLAGEN: er staan lokale wijzigingen klaar — niets aangeraakt"
+  write_status "overgeslagen (lokale wijzigingen)"
+  exit 0
+fi
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+if [ "$CURRENT_BRANCH" != "$BRANCH" ] && [ -n "$(git log --oneline "origin/$BRANCH..HEAD" 2>/dev/null)" ]; then
+  log "OVERGESLAGEN: branch '$CURRENT_BRANCH' heeft eigen commits — niets aangeraakt"
+  write_status "overgeslagen (eigen commits op $CURRENT_BRANCH)"
+  exit 0
 fi
 
 log "Update gevonden: ${LOCAL:0:7} -> ${REMOTE:0:7}"
@@ -54,7 +84,9 @@ if git reset --hard --quiet "origin/$BRANCH" 2>>"$LOG"; then
   # op de TV staat. In plaats daarvan laten we een vlag achter; het dashboard
   # meldt zelf dat er een update klaarstaat.
   printf '%s' "$NEW_VERSION" > "$REPO/.update-ready" 2>/dev/null || true
+  write_status "bijgewerkt naar $NEW_VERSION — herstart Chrome"
 else
   log "FOUT: bijwerken mislukt"
+  write_status "mislukt"
   exit 1
 fi

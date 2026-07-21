@@ -53,7 +53,7 @@ if (IS_EXTENSION) {
       return true;
     }
     if (msg.action === "runTool") {
-      runTool(msg.tool, tabId).then(sendResponse).catch(function (e) {
+      runTool(msg.tool, tabId, msg.classId).then(sendResponse).catch(function (e) {
         sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
       });
       return true;
@@ -539,7 +539,7 @@ async function openClassById(id, tabId) {
   return { ok: true };
 }
 
-async function runTool(toolId, tabId) {
+async function runTool(toolId, tabId, classIdFromClick) {
   if (tabId == null) return { ok: false, error: "Geen tab." };
   var cfg = await loadConfigForBackground();
   if (!cfg || !Array.isArray(cfg.shortcuts)) {
@@ -600,7 +600,7 @@ async function runTool(toolId, tabId) {
    *        Bekijk / Wijzig → Deelnemer toevoegen.
    */
   if (toolId === "leden") {
-    var classId = s.selectedClassId;
+    var classId = classIdFromClick || s.selectedClassId;
     if (!classId) {
       return { ok: false, noClass: true, type: ctx.type,
                reason: "Kies eerst een les in het uitklapmenu op de knop." };
