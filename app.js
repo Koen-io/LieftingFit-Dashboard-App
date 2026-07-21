@@ -1039,20 +1039,44 @@
 
   function checkForUpdates(manual) {
     if (!IS_EXT) { if (manual) toast("Alleen beschikbaar in de extensie"); return; }
-    var mine = chrome.runtime.getManifest().version;
+    var mine = chrome.runtime.getManifest().version;   // version Chrome LOADED
     if (manual) toast("Zoeken naar updates…");
-    fetch(VERSION_URL, { cache: "no-store" })
+
+    // First: has the nightly script already pulled a newer version onto this
+    // laptop? The extension can read its own folder, so the manifest ON DISK
+    // tells us — and if it differs from the loaded one, the update is here and
+    // only needs Chrome to restart. That is the common case once the updater
+    // is installed, and it needs no network at all.
+    fetch(chrome.runtime.getURL("manifest.json"), { cache: "no-store" })
       .then(function (r) { return r.json(); })
-      .then(function (j) {
-        var theirs = j && j.version;
-        if (!theirs) throw new Error("geen versie");
-        if (cmpVersions(theirs, mine) > 0) {
-          showUpdateAvailable(mine, theirs);
-        } else if (manual) {
-          toast("Je hebt de nieuwste versie (" + mine + ")");
+      .then(function (disk) {
+        if (disk && disk.version && cmpVersions(disk.version, mine) > 0) {
+          showRestartNeeded(mine, disk.version);
+          return null;                                  // stop here
         }
+        return fetch(VERSION_URL, { cache: "no-store" }).then(function (r) { return r.json(); });
+      })
+      .then(function (j) {
+        if (!j) return;                                 // already handled above
+        var theirs = j.version;
+        if (!theirs) throw new Error("geen versie");
+        if (cmpVersions(theirs, mine) > 0) showUpdateAvailable(mine, theirs);
+        else if (manual) toast("Je hebt de nieuwste versie (" + mine + ")");
       })
       .catch(function () { if (manual) toast("Kon niet controleren op updates"); });
+  }
+
+  // The update is already on the laptop; Chrome just has not loaded it.
+  function showRestartNeeded(mine, ready) {
+    $("#noClassTitle").textContent = "Update klaar";
+    $("#noClassBody").innerHTML =
+      '<p class="noclass-lead">Versie <b>' + escapeHtml(ready) + "</b> staat klaar op deze laptop " +
+      "(je gebruikt nu " + escapeHtml(mine) + ").</p>" +
+      '<p class="help-text">Sluit Chrome helemaal af en start hem opnieuw — dan is de ' +
+      "update actief. Verder hoef je niets te doen.</p>" +
+      '<p class="help-text">Staat er een les op de TV? Doe het dan na afloop; ' +
+      "het dashboard blijft gewoon werken.</p>";
+    show("#noClassModal");
   }
 
   function showUpdateAvailable(mine, theirs) {

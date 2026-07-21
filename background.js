@@ -550,6 +550,7 @@ async function runTool(toolId, tabId) {
   if (!s) return { ok: false, error: "Onbekende knop: " + toolId };
 
   var ctx = buildContextForBackground(cfg, s);
+  ctx.roster = s.selectedRoster || "";
 
   // Both class-bound buttons are gated on the same question — "is this class on
   // today's roster?" — answered by one API call, before the room tab moves at
@@ -584,6 +585,51 @@ async function runTool(toolId, tabId) {
       }
       // Dexos has no equivalent deep link, so it still replays — but only now
       // that we know the class exists.
+    }
+  }
+
+  /* --- Leden toevoegen ---
+   * Matched by EVENT ID, not by colour/time. Each block in the Dexos
+   * Groepslessen grid is a div.les whose onclick is
+   *   calender.select(this, {"id":110634, …})
+   * and that id is the same one the Sportbit roster API returns. So the class
+   * the trainer picked in the dropdown can be located exactly, with no
+   * guessing from the legend or the time axis.
+   *
+   * Chain: Planning → Groepslessen → set zaal → click the block →
+   *        Bekijk / Wijzig → Deelnemer toevoegen.
+   */
+  if (toolId === "leden") {
+    var classId = s.selectedClassId;
+    if (!classId) {
+      return { ok: false, noClass: true, type: ctx.type,
+               reason: "Kies eerst een les in het uitklapmenu op de knop." };
+    }
+    var zaal = cfg.selectedRooster || "";
+    var ledenSteps = [
+      { type: "navigate", url: "https://lieftingfit.sportbitapp.nl/dexos/" },
+      { type: "click", selectors: [["text/Planning"]] },
+      { type: "click", selectors: [["text/GROEPSLESSEN"], ["has/GROEPSLESSEN"]] }
+    ];
+    // The grid only shows one location at a time, so a block in another zaal
+    // simply would not be there. Dexos prefixes its option ("LieftingFit - Gym
+    // - beneden"), and setValue falls back to substring, so the plain zaal name
+    // matches. Skipped for "Alle roosters", which Dexos has no option for.
+    if (zaal && !/^alle/i.test(zaal)) {
+      ledenSteps.push({ type: "change", value: zaal, selectors: [["selopt/LieftingFit"]] });
+    }
+    ledenSteps.push(
+      { type: "click", selectors: [['xpath///div[contains(@onclick, \'"id":' + classId + ',\')]']] },
+      { type: "click", selectors: [["text/Bekijk / Wijzig"], ["has/Bekijk"]] },
+      { type: "click", selectors: [["text/Deelnemer toevoegen"]] }
+    );
+
+    await setBusy(tabId, "Deelnemers openen…");
+    try {
+      return await runMacro({ startUrl: "https://lieftingfit.sportbitapp.nl/dexos/",
+                              steps: ledenSteps, context: ctx }, tabId);
+    } finally {
+      await clearBusy(tabId);
     }
   }
 
