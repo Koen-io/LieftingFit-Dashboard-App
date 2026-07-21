@@ -1,9 +1,41 @@
 #!/bin/bash
-# Opens Chrome directly on the LieftingFit dashboard.
-# Runs inside an .app bundle, so no Terminal window ever appears.
+# Opens Chrome on the LieftingFit dashboard, in macOS fullscreen.
 #
-# Deliberately NO --start-fullscreen here: that flag gives Chrome's tab-less
-# presentation fullscreen, which hides the tab strip and the cast menu. The
-# extension puts the window into macOS fullscreen (green button) on load
-# instead, which hides the Mac menubar while keeping Chrome's own chrome.
-open -na "Google Chrome" --args --new-window "chrome-extension://odppaoogblejdfldnlfacbeiomckheej/index.html"
+# Why AppleScript and not a Chrome flag or the extension API:
+#   --start-fullscreen        -> Chrome's PRESENTATION fullscreen: no tab strip.
+#   chrome.windows "fullscreen" -> same thing; the tabs disappear.
+# Both hide the cast menu, which is the one control the trainer needs.
+#
+# The green button is a macOS window attribute (AXFullScreen), not a Chrome
+# mode, so only the OS can set it. That keeps Chrome's tab strip and toolbar
+# while hiding the Mac menubar.
+#
+# Requires Accessibility permission for this app once, the first time.
+EXT_ID="odppaoogblejdfldnlfacbeiomckheej"
+URL="chrome-extension://${EXT_ID}/index.html"
+
+open -na "Google Chrome" --args --new-window "$URL"
+
+# Wait for the window to exist before touching it. Polls rather than sleeping a
+# fixed amount, so a cold Chrome start is handled without a long delay.
+for i in $(seq 1 40); do
+  if osascript -e 'tell application "Google Chrome" to count windows' 2>/dev/null | grep -qv '^0$'; then
+    break
+  fi
+  sleep 0.25
+done
+sleep 0.6   # let the window finish opening before changing its attribute
+
+osascript <<'APPLESCRIPT' 2>/dev/null
+tell application "Google Chrome" to activate
+delay 0.3
+tell application "System Events"
+  tell process "Google Chrome"
+    try
+      if value of attribute "AXFullScreen" of front window is false then
+        set value of attribute "AXFullScreen" of front window to true
+      end if
+    end try
+  end tell
+end tell
+APPLESCRIPT

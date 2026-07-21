@@ -79,8 +79,13 @@ if (IS_EXTENSION) {
       // Fullscreen API, which would hide the tabs.
       if (sender && sender.tab && sender.tab.windowId != null) {
         chrome.windows.get(sender.tab.windowId).then(function (w) {
-          if (w.state !== "fullscreen") {
-            return chrome.windows.update(sender.tab.windowId, { state: "fullscreen" });
+          // Only grow a NORMAL window. Chrome's own "fullscreen" state is the
+          // presentation one that hides the tab strip, so it is never set from
+          // here; the desktop app puts the window into macOS fullscreen via
+          // AXFullScreen instead. A window already in either state is left
+          // alone so this cannot undo that.
+          if (w.state === "normal") {
+            return chrome.windows.update(sender.tab.windowId, { state: "maximized" });
           }
         }).catch(function () {}).then(function () { sendResponse({ ok: true }); });
         return true;
@@ -232,7 +237,7 @@ async function openRoom(zaal) {
   // Maximise the window a zaal opens in. The trainer needs the Chrome tab strip
   // and the cast menu, so this is a maximised WINDOW — not fullscreen, which
   // would hide exactly the controls they came for.
-  try { await chrome.windows.update(tab.windowId, { state: "fullscreen" }); } catch (e) {}
+  try { await chrome.windows.update(tab.windowId, { state: "maximized" }); } catch (e) {}
   rooms[zaal] = tab.id;
   await setRooms(rooms);
   return { ok: true, tabId: tab.id, reused: false };
