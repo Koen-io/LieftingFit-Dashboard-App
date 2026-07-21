@@ -61,6 +61,35 @@
     titlebarAutoHide: false,
     // On arrival, preselect the class type that is running or starts next.
     autoSelectType: true,
+    // Which Sportbit roster (zaal) this dashboard is for. The gym's TVs are all
+    // downstairs, so "Gym - beneden" is the sensible default — but the other
+    // rosters stay selectable rather than being ruled out.
+    selectedRooster: "Gym - beneden",
+    // Seed of "which classes run in which zaal". Measured from the live roster;
+    // the extension keeps learning and merges what it sees, so this only has to
+    // be roughly right. Editable in Settings.
+    rosterTypes: {
+      "Gym - beneden": [
+        "60+ training", "Booty", "Booty daluren", "Calisthenics", "Core", "CoreFit",
+        "CrossFit", "Crossfit Daluren", "CrossFit open", "Fitness", "FitnessFit",
+        "Hyrox", "Hyrox daluren", "Hyrox strength", "Kettlebell Training",
+        "Olympic weightlifting", "OpenGym", "Powerliften", "PRVN Burn", "Strength",
+        "TRX", "TRX Daluren", "Trx training", "Trx / Booty mix"
+      ],
+      "Gym - bokszaal": [
+        "Advanced Kickboxing", "Boksen", "brazilian jiu jitsu", "Kickboksen",
+        "Kickboksen (daluren)", "Sparren (kickboksen)", "TeenFit kickboksen",
+        "Trx", "Yoga", "Specialty class: Pilates"
+      ],
+      "Gym - KidsFit / TeenFit": [
+        "Calisthenics Kids & Teens", "Junior Powerliften", "KidsFit",
+        "TeenFit Calisthenics", "TeenFit kickboksen"
+      ],
+      "The Outdoor Project!": [
+        "The Outdoor Project - Castricum", "The Outdoor project - Uitgeest", "The Run Club"
+      ],
+      "De machinekamer": []
+    },
     shortcuts: [
       {
         // Ignores the class-type dropdown entirely: opens whatever is running
@@ -213,6 +242,29 @@
   function mirrorConfig(cfg) {
     if (!IS_EXT) return;
     try { chrome.storage.local.set({ config: cfg }); } catch (e) {}
+    backupConfig(cfg);
+  }
+
+  /* Rolling back-ups. Someone will eventually change a setting they did not
+   * understand, and "restore the last version that worked" should not depend on
+   * them having exported a file first. Keeps the last 10, newest first, and
+   * skips writing when nothing actually changed so a reload cannot flush the
+   * history out with identical copies. */
+  var BACKUPS_KEY = "configBackups";
+  function backupConfig(cfg) {
+    if (!IS_EXT) return;
+    try {
+      chrome.storage.local.get(BACKUPS_KEY, function (r) {
+        void chrome.runtime.lastError;
+        var list = (r && r[BACKUPS_KEY]) || [];
+        var json = JSON.stringify(cfg);
+        if (list.length && list[0].json === json) return;      // no change
+        list.unshift({ at: Date.now(), json: json });
+        chrome.storage.local.set(function () {
+          var o = {}; o[BACKUPS_KEY] = list.slice(0, 10); return o;
+        }());
+      });
+    } catch (e) {}
   }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function normalize(cfg) {
@@ -256,6 +308,8 @@
     if (Array.isArray(cfg.rooms) && cfg.rooms.length) base.rooms = cfg.rooms;
     if (typeof cfg.titlebarAutoHide === "boolean") base.titlebarAutoHide = cfg.titlebarAutoHide;
     if (typeof cfg.autoSelectType === "boolean") base.autoSelectType = cfg.autoSelectType;
+    if (typeof cfg.selectedRooster === "string") base.selectedRooster = cfg.selectedRooster;
+    if (cfg.rosterTypes && typeof cfg.rosterTypes === "object") base.rosterTypes = cfg.rosterTypes;
     if (base.classTypes.indexOf(base.selectedType) < 0) base.selectedType = base.classTypes[0];
     return base;
   }
@@ -419,9 +473,15 @@
   function refreshDayInfo(cb) {
     if (!IS_EXT) { if (cb) cb(null); return; }
     try {
-      chrome.runtime.sendMessage({ action: "dayInfo", type: config.selectedType }, function (res) {
+      chrome.runtime.sendMessage({
+        action: "dayInfo",
+        type: config.selectedType,
+        rooster: config.selectedRooster
+      }, function (res) {
         if (chrome.runtime.lastError) { if (cb) cb(null); return; }
         dayCache = res && res.ok ? res : null;
+        renderRoosterSelect();  // the live zaal list may have just arrived
+        renderTypeSelect();     // …and with it, which types that zaal runs
         renderNowNext();
         renderTiles();          // the "Nu bezig" tile depends on this too
         if (cb) cb(dayCache);
@@ -478,6 +538,103 @@
       void chrome.runtime.lastError;
       hideBusy();
     });
+  }
+
+  /* ---- Feedback (Web3Forms) ----
+   * A trainer who hits something odd should be able to say so from the screen
+   * they hit it on, rather than remembering to mention it later. */
+  var WEB3FORMS_KEY = "dce1a844-e56d-4064-9ad8-cb95b79dc9ad";
+
+  function openFeedback() {
+    var body = $("#feedbackBody");
+    body.innerHTML =
+      '<p class="help-text">Werkt er iets niet, of mis je iets? Laat het hier achter — ' +
+      "het komt rechtstreeks bij Koen terecht.</p>";
+
+    // Name is required: without it a report cannot be followed up, and in a gym
+    // with several trainers "het werkt niet" from nobody in particular is not
+    // actionable.
+    var nameWrap = el("label", { "class": "set-field" });
+    nameWrap.appendChild(el("span", null, 'Je naam <span class="req">*</span>'));
+    var nameIn = el("input", { type: "text", id: "fbName", autocomplete: "name",
+                               placeholder: "Bijv. Pelle" });
+    nameWrap.appendChild(nameIn);
+    body.appendChild(nameWrap);
+
+    var mailWrap = el("label", { "class": "set-field" });
+    mailWrap.appendChild(el("span", null, 'E-mailadres <span class="opt">(optioneel)</span>'));
+    var mailIn = el("input", { type: "email", id: "fbMail", autocomplete: "email",
+                               placeholder: "Alleen als je antwoord wilt" });
+    mailWrap.appendChild(mailIn);
+    body.appendChild(mailWrap);
+
+    var msgWrap = el("label", { "class": "set-field" });
+    msgWrap.appendChild(el("span", null, 'Je bericht <span class="req">*</span>'));
+    var ta = el("textarea", { "class": "types-textarea", id: "fbMsg", rows: "6",
+                              placeholder: "Wat ging er mis, of wat zou je willen?" });
+    msgWrap.appendChild(ta);
+    body.appendChild(msgWrap);
+
+    body.appendChild(el("div", { "class": "fb-error", id: "fbError" }, ""));
+
+    // Context the trainer should not have to type out themselves.
+    body.appendChild(el("p", { "class": "help-text" },
+      "Automatisch meegestuurd: zaal, rooster, lestype en versie."));
+    show("#feedbackModal");
+    setTimeout(function () { nameIn.focus(); }, 50);
+  }
+
+  function fbError(msg, focusId) {
+    var e = $("#fbError");
+    if (e) e.textContent = msg || "";
+    if (focusId && $("#" + focusId)) $("#" + focusId).focus();
+  }
+
+  function sendFeedback() {
+    var who = ($("#fbName") && $("#fbName").value || "").trim();
+    var mail = ($("#fbMail") && $("#fbMail").value || "").trim();
+    var msg = ($("#fbMsg") && $("#fbMsg").value || "").trim();
+
+    if (!who) { fbError("Vul je naam in, zodat we weten wie het meldt.", "fbName"); return; }
+    if (!msg) { fbError("Vul een bericht in.", "fbMsg"); return; }
+    // Only validated when given — the field is optional and a typo should not
+    // silently produce an unreplyable message.
+    if (mail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) {
+      fbError("Dat e-mailadres lijkt niet te kloppen.", "fbMail"); return;
+    }
+    fbError("");
+
+    var btn = $("#btnFeedbackSend");
+    btn.disabled = true;
+    btn.textContent = "Versturen…";
+
+    fetch("https://api.web3forms.com/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({
+        access_key: WEB3FORMS_KEY,
+        subject: "LieftingFit Dashboard — feedback van " + who,
+        from_name: who,
+        // Web3Forms uses `email` as the reply-to when present.
+        email: mail || undefined,
+        message: msg,
+        zaal: ZAAL || "—",
+        rooster: config.selectedRooster || "—",
+        lestype: config.selectedType || "—",
+        versie: IS_EXT ? chrome.runtime.getManifest().version : "web"
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.success) {
+          hide("#feedbackModal");
+          toast("Bedankt! Je feedback is verstuurd.");
+        } else {
+          toast("Versturen mislukt — probeer het later opnieuw");
+        }
+      })
+      .catch(function () { toast("Versturen mislukt — geen verbinding?"); })
+      .then(function () { btn.disabled = false; btn.textContent = "Versturen"; });
   }
 
   var toastTimer;
@@ -645,15 +802,65 @@
     badge.textContent = (ROOM_ICONS[ZAAL] || "▪") + " Zaal " + ZAAL;
   }
 
+  // Step 1 — which zaal this dashboard is for.
+  function renderRoosterSelect() {
+    var sel = $("#roosterSelect");
+    if (!sel) return;
+    var names = ["Alle roosters"];
+    // Prefer the live list; fall back to whatever the config knows so the
+    // picker is never empty before the roster API answers.
+    var live = (dayCache && dayCache.rosters) || [];
+    if (live.length) live.forEach(function (r) { if (names.indexOf(r.naam) < 0) names.push(r.naam); });
+    else Object.keys(config.rosterTypes || {}).forEach(function (n) { if (names.indexOf(n) < 0) names.push(n); });
+
+    if (names.indexOf(config.selectedRooster) < 0) names.push(config.selectedRooster);
+    sel.innerHTML = "";
+    names.forEach(function (name) {
+      var opt = el("option", { value: name }, escapeHtml(name));
+      if (name === config.selectedRooster) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  // The class types available in the selected zaal. Falls back to the full list
+  // for "Alle roosters", or when nothing is known about a zaal yet — better a
+  // long list than an empty one.
+  function typesForCurrentRooster() {
+    var r = config.selectedRooster;
+    if (!r || /^alle/i.test(r)) return config.classTypes;
+    var known = (dayCache && dayCache.zaalTypes) || (config.rosterTypes && config.rosterTypes[r]) || [];
+    if (!known.length) return config.classTypes;
+    var set = {};
+    known.forEach(function (t) { set[normType(t)] = true; });
+    // Keep the dashboard's own spelling and ordering; match on the roster's.
+    var out = config.classTypes.filter(function (t) {
+      if (set[normType(t)]) return true;
+      var alias = config.rosterAliases && config.rosterAliases[t];
+      return !!(alias && set[normType(alias)]);
+    });
+    return out.length ? out : config.classTypes;
+  }
+
+  // Step 2 — the class type, narrowed to what runs in the chosen zaal.
   function renderTypeSelect() {
     var sel = $("#typeSelect");
     if (!sel) return;
+    var list = typesForCurrentRooster();
+    if (list.indexOf(config.selectedType) < 0) {
+      config.selectedType = list[0];      // the old pick is not offered here
+    }
     sel.innerHTML = "";
-    config.classTypes.forEach(function (name) {
-      var opt = el("option", { value: name }, name);
+    list.forEach(function (name) {
+      var opt = el("option", { value: name }, escapeHtml(name));
       if (name === config.selectedType) opt.selected = true;
       sel.appendChild(opt);
     });
+    var hint = $("#contextHint");
+    if (hint) {
+      hint.textContent = /^alle/i.test(config.selectedRooster || "")
+        ? "De knoppen hieronder werken op de les van dit type."
+        : "Alleen lessen uit " + config.selectedRooster + ".";
+    }
   }
 
   function escapeHtml(str) {
@@ -681,9 +888,84 @@
   }
 
   // ----- Settings modal -----
+  // Expertmodus is per visit to Settings, never remembered — the warning should
+  // be seen every time, not dismissed once and forgotten.
+  var expertUnlocked = false;
+
   function openSettings() {
+    expertUnlocked = false;
     buildSettingsForm();
     show("#settingsModal");
+  }
+
+  function restoreBackup() {
+    if (!IS_EXT) { toast("Alleen beschikbaar in de extensie"); return; }
+    chrome.storage.local.get(BACKUPS_KEY, function (r) {
+      void chrome.runtime.lastError;
+      var list = (r && r[BACKUPS_KEY]) || [];
+      // [0] is the config as it is now, so the first meaningful restore is [1].
+      var prev = list[1] || list[0];
+      if (!prev) { toast("Nog geen back-up beschikbaar"); return; }
+      var when = new Date(prev.at).toLocaleString("nl-NL");
+      if (!confirm("Instellingen terugzetten naar de versie van " + when + "?")) return;
+      try {
+        config = normalize(JSON.parse(prev.json));
+        saveConfig(config);
+        buildSettingsForm();
+        renderAll();
+        toast("Back-up van " + when + " teruggezet");
+      } catch (e) { toast("Back-up kon niet worden gelezen"); }
+    });
+  }
+
+  /* ---- Updates ----
+   * The extension is loaded unpacked, so Chrome will never update it. Compare
+   * the manifest version against the one on GitHub and tell the trainer to pull
+   * — that is the honest limit of what an unpacked extension can do for itself.
+   */
+  var VERSION_URL =
+    "https://raw.githubusercontent.com/Koen-io/LieftingFit-Dashboard-App/claude/crossfit-hyrox-gym-p9cawx/manifest.json";
+
+  function cmpVersions(a, b) {
+    var pa = String(a).split("."), pb = String(b).split(".");
+    for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
+      var x = parseInt(pa[i] || "0", 10), y = parseInt(pb[i] || "0", 10);
+      if (x !== y) return x > y ? 1 : -1;
+    }
+    return 0;
+  }
+
+  function checkForUpdates(manual) {
+    if (!IS_EXT) { if (manual) toast("Alleen beschikbaar in de extensie"); return; }
+    var mine = chrome.runtime.getManifest().version;
+    if (manual) toast("Zoeken naar updates…");
+    fetch(VERSION_URL, { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var theirs = j && j.version;
+        if (!theirs) throw new Error("geen versie");
+        if (cmpVersions(theirs, mine) > 0) {
+          showUpdateAvailable(mine, theirs);
+        } else if (manual) {
+          toast("Je hebt de nieuwste versie (" + mine + ")");
+        }
+      })
+      .catch(function () { if (manual) toast("Kon niet controleren op updates"); });
+  }
+
+  function showUpdateAvailable(mine, theirs) {
+    var body = $("#noClassBody");
+    $("#noClassTitle").textContent = "Update beschikbaar";
+    body.innerHTML =
+      '<p class="noclass-lead">Er is een nieuwere versie: <b>' + escapeHtml(theirs) + "</b> " +
+      "(jij hebt " + escapeHtml(mine) + ").</p>" +
+      '<p class="help-text">Bijwerken op deze laptop:</p>' +
+      '<ol class="help-text">' +
+        "<li>Open Terminal en voer uit:<br><code>cd \"/Users/macminiks/Code/LieftingFit Dashboard App\" &amp;&amp; git pull</code></li>" +
+        "<li>Ga naar <code>chrome://extensions</code></li>" +
+        "<li>Klik op <b>⟳</b> bij LieftingFit Trainer Dashboard</li>" +
+      "</ol>";
+    show("#noClassModal");
   }
   function buildSettingsForm() {
     var body = $("#settingsBody");
@@ -729,18 +1011,73 @@
     rm.appendChild(asWrap);
     body.appendChild(rm);
 
-    // Shortcuts
+    // Shortcuts — hidden behind a deliberate confirmation. Editing these can
+    // stop the dashboard working, and most trainers never need them.
     var sc = el("div", { "class": "set-section" }, "<h3>Snelkoppelingen</h3>");
-    var scList = el("div", { id: "scList" });
-    config.shortcuts.forEach(function (s, i) { scList.appendChild(shortcutCard(s, i)); });
-    sc.appendChild(scList);
-    var addSc = el("button", { "class": "add-row", "type": "button" }, "+ Snelkoppeling toevoegen");
-    addSc.addEventListener("click", function () {
-      config.shortcuts.push({ id: "custom" + Date.now(), label: "Nieuwe knop", sub: "", icon: "link", accent: ACCENTS[config.shortcuts.length % ACCENTS.length], cast: false, url: "" });
-      buildSettingsForm();
-    });
-    sc.appendChild(addSc);
+    if (!expertUnlocked) {
+      sc.appendChild(el("p", { "class": "help-text" },
+        "De knoppen zijn al ingesteld en werken. Aanpassen is alleen nodig als er " +
+        "iets aan Sportbit zelf verandert."));
+      var openExpert = el("button", { "class": "btn btn-ghost", "type": "button" },
+        "Snelkoppelingen aanpassen (expertmodus)");
+      openExpert.addEventListener("click", function () { show("#expertModal"); });
+      sc.appendChild(openExpert);
+    } else {
+      sc.appendChild(el("p", { "class": "help-text help-warn" },
+        "⚠️ Expertmodus actief. Wijzigingen hier kunnen het dashboard onbruikbaar maken."));
+      var scList = el("div", { id: "scList" });
+      config.shortcuts.forEach(function (s, i) { scList.appendChild(shortcutCard(s, i)); });
+      sc.appendChild(scList);
+      var addSc = el("button", { "class": "add-row", "type": "button" }, "+ Snelkoppeling toevoegen");
+      addSc.addEventListener("click", function () {
+        config.shortcuts.push({ id: "custom" + Date.now(), label: "Nieuwe knop", sub: "", icon: "link", accent: ACCENTS[config.shortcuts.length % ACCENTS.length], cast: false, url: "" });
+        buildSettingsForm();
+      });
+      sc.appendChild(addSc);
+    }
     body.appendChild(sc);
+
+    // Which classes belong to which zaal — the list that narrows step 2.
+    var rt = el("div", { "class": "set-section" }, "<h3>Lestypes per zaal</h3>");
+    rt.appendChild(el("p", { "class": "help-text" },
+      "Bepaalt welke lestypes je kunt kiezen per rooster. De extensie vult dit " +
+      "zelf aan zodra ze een zaal in Sportbit ziet — hier kun je het bijsturen. " +
+      "Eén lestype per regel."));
+    var zaalPick = el("select", { "class": "type-select" });
+    var zaalNames = Object.keys(config.rosterTypes || {});
+    (dayCache && dayCache.rosters || []).forEach(function (r) {
+      if (zaalNames.indexOf(r.naam) < 0) zaalNames.push(r.naam);
+    });
+    zaalNames.forEach(function (n) { zaalPick.appendChild(el("option", { value: n }, escapeHtml(n))); });
+    rt.appendChild(zaalPick);
+    var zaalTa = el("textarea", { "class": "types-textarea", rows: "7", spellcheck: "false" });
+    function loadZaal() {
+      zaalTa.value = ((config.rosterTypes || {})[zaalPick.value] || []).join("\n");
+    }
+    zaalPick.addEventListener("change", loadZaal);
+    zaalTa.addEventListener("input", function () {
+      if (!config.rosterTypes) config.rosterTypes = {};
+      config.rosterTypes[zaalPick.value] = zaalTa.value.split("\n")
+        .map(function (s) { return s.trim(); }).filter(Boolean);
+    });
+    loadZaal();
+    rt.appendChild(zaalTa);
+    body.appendChild(rt);
+
+    // Updates + back-ups
+    var up = el("div", { "class": "set-section" }, "<h3>Onderhoud</h3>");
+    var verLine = el("div", { "class": "help-text" },
+      "Versie " + escapeHtml(IS_EXT ? chrome.runtime.getManifest().version : "—"));
+    up.appendChild(verLine);
+    var upRow = el("div", { "class": "set-row-btns" });
+    var btnUpd = el("button", { "class": "btn btn-ghost", "type": "button" }, "Controleer op updates");
+    btnUpd.addEventListener("click", function () { checkForUpdates(true); });
+    upRow.appendChild(btnUpd);
+    var btnRestore = el("button", { "class": "btn btn-ghost", "type": "button" }, "Herstel back-up");
+    btnRestore.addEventListener("click", restoreBackup);
+    upRow.appendChild(btnRestore);
+    up.appendChild(upRow);
+    body.appendChild(up);
 
     // Auto-login. Deliberately NOT part of `config`: it is stored under its own
     // chrome.storage.local key so "Exporteer config" can never write the
@@ -1025,7 +1362,9 @@
     renderBindings();
     renderZaalBar();
     renderRoomBadge();
+    renderRoosterSelect();
     renderTypeSelect();
+    renderNowNext();
     renderTiles();
   }
 
@@ -1067,6 +1406,8 @@
       } catch (e) {}
       // Keep Nu/Hierna honest as classes roll over.
       setInterval(function () { refreshDayInfo(); }, 60000);
+      // Unpacked extensions never auto-update, so check on every start.
+      setTimeout(function () { checkForUpdates(false); }, 2500);
     }
     tickClock();
     setInterval(tickClock, 1000 * 15);
@@ -1076,10 +1417,28 @@
     $("#btnCastHelp").addEventListener("click", function () { buildCastHelp(); show("#castModal"); });
     $("#hintCast").addEventListener("click", function () { buildCastHelp(); show("#castModal"); });
 
+    $("#roosterSelect").addEventListener("change", function () {
+      config.selectedRooster = $("#roosterSelect").value;
+      saveConfig(config);
+      renderTypeSelect();     // step 2 depends on step 1
+      renderTiles();
+      refreshDayInfo();       // Nu/Hierna must follow the chosen zaal
+      toast("Rooster: " + config.selectedRooster);
+    });
+
     $("#typeSelect").addEventListener("change", function () {
       config.selectedType = $("#typeSelect").value;
       saveConfig(config);
       renderTiles(); // refresh the "Vandaag · <type>" chips
+      refreshDayInfo();
+    });
+
+    $("#btnFeedback").addEventListener("click", openFeedback);
+    $("#btnFeedbackSend").addEventListener("click", sendFeedback);
+    $("#btnExpertConfirm").addEventListener("click", function () {
+      expertUnlocked = true;
+      hide("#expertModal");
+      buildSettingsForm();
     });
 
     $("#btnSave").addEventListener("click", saveSettings);
@@ -1095,6 +1454,8 @@
     document.querySelectorAll("[data-close]").forEach(function (b) {
       b.addEventListener("click", function () {
         hide("#settingsModal"); hide("#castModal"); hide("#noClassModal");
+        hide("#expertModal"); hide("#feedbackModal");
+        $("#noClassTitle").textContent = "Geen les gevonden";   // shared dialog
       });
     });
     document.querySelectorAll(".modal-overlay").forEach(function (ov) {

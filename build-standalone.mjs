@@ -29,8 +29,12 @@ html = html.replace('src="assets/liftingfit-white.png"', 'src="' + logoData + '"
 // Replace external script with inline
 html = html.replace('<script src="app.js"></script>', "<script>\n" + js + "\n</script>");
 
+// The frosted brand mark is a CSS background, so its relative asset path has to
+// be inlined too — otherwise the standalone file shows an empty square.
+const cssInlined = css.replace(/url\(["']?assets\/liftingfit-white\.png["']?\)/g, 'url("' + logoData + '")');
+
 // Prepend inline styles
-const out = "<style>\n" + css + "\n</style>\n" + html.trimStart();
+const out = "<style>\n" + cssInlined + "\n</style>\n" + html.trimStart();
 
 fs.writeFileSync(path.join(ROOT, "lieftingfit-dashboard-standalone.html"), out);
 console.log("built standalone:", out.length, "bytes");

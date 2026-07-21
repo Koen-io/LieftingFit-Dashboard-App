@@ -452,3 +452,56 @@ kbd {
 .busy-text { font-size: 21px; font-weight: 800; }
 .busy-sub { margin-top: 7px; color: var(--muted); font-size: 14px; }
 @media (prefers-reduced-motion: reduce) { .busy-spinner { animation-duration: 2.4s; } }
+
+/* Two-step context bar: zaal (1) then class type (2). */
+.step { display: flex; align-items: center; gap: 12px; }
+.step-num {
+  flex: none;
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #e2673c; color: #fff;
+  font-weight: 800; font-size: 15px;
+}
+.context-bar { gap: 20px; }
+@media (max-width: 900px) {
+  .step { width: 100%; }
+  .step .type-select { flex: 1; min-width: 0; }
+}
+
+/* ---------- Frosted brand mark ----------
+   A very faint LieftingFit logo behind everything. Scales with the window
+   (vmin) so it always sits fully in view, and is deliberately near-invisible:
+   anything stronger competes with the tiles and hurts readability on a TV.
+   pointer-events:none so it can never swallow a click. */
+body::before {
+  content: "";
+  position: fixed;
+  top: 50%; left: 50%;
+  width: 78vmin; height: 78vmin;
+  transform: translate(-50%, -50%);
+  background: url("assets/liftingfit-white.png") center/contain no-repeat;
+  opacity: 0.038;
+  filter: blur(0.6px) saturate(0);
+  pointer-events: none;
+  z-index: 0;
+}
+/* Keep all real content above the mark. */
+#app, .modal-overlay, .toast, .busy { position: relative; z-index: 1; }
+.modal-overlay, .busy { z-index: 60; }
+
+@media (max-width: 700px) { body::before { width: 92vmin; height: 92vmin; opacity: 0.03; } }
+
+/* Feedback form */
+.set-field .req { color: #ff8f8f; font-weight: 800; }
+.set-field .opt { color: var(--muted-2); font-weight: 400; }
+.fb-error {
+  min-height: 18px; margin-top: 10px;
+  color: #ff8f8f; font-size: 13px; font-weight: 600;
+}
+.fb-error:empty { display: none; }
+
+/* `display:flex` on a section outranks the HTML `hidden` attribute's default
+   `display:none`, so hidden bars still reserved space and showed as empty
+   rounded boxes. Make hidden mean hidden. */
+[hidden] { display: none !important; }

@@ -1,23 +1,42 @@
 {
   "manifest_version": 3,
   "name": "LieftingFit Trainer Dashboard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Snelkoppelingen-dashboard met één-klik dieplinks (Type B) voor de trainers van LieftingFit.",
   "action": {
     "default_title": "LieftingFit Dashboard openen",
-    "default_icon": { "16": "assets/favicon-64.png", "48": "assets/icon-192.png", "128": "assets/icon-192.png" }
+    "default_icon": {
+      "16": "assets/favicon-64.png",
+      "48": "assets/icon-192.png",
+      "128": "assets/icon-192.png"
+    }
   },
-  "background": { "service_worker": "background.js" },
-  "permissions": ["tabs", "scripting", "storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage"
+  ],
   "host_permissions": [
     "https://lieftingfit.sportbitapp.nl/*",
-    "https://*.sportbitapp.nl/*"
+    "https://*.sportbitapp.nl/*",
+    "https://api.web3forms.com/*",
+    "https://raw.githubusercontent.com/*"
   ],
   "content_scripts": [
     {
-      "matches": ["https://*.sportbitapp.nl/*"],
-      "js": ["titlebar.js", "login.js"],
-      "css": ["titlebar.css"],
+      "matches": [
+        "https://*.sportbitapp.nl/*"
+      ],
+      "js": [
+        "titlebar.js",
+        "login.js"
+      ],
+      "css": [
+        "titlebar.css"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }
@@ -27,5 +46,6 @@
     "48": "assets/icon-192.png",
     "128": "assets/icon-192.png",
     "512": "assets/icon-512.png"
-  }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsEx+FLdrc8ABjoDqVF8pQQpT4DdGGOR9q57C/YayRIyBGdSF7zuipl3PXot4BXoin/uUU4d2G/ojblMxGMpDMxM8C5jWqrMtQi1/r5jEeLfSYqZC6ZhxaW48x+4jxVXN8qCmAG4kwuJiHiJSqwoKzr6UpwhOAvhvdGfDVi9t+pLwJQ3IoQbtCmiL3Rs2+a4FdAs4qCeRP5KB+D/cxSQyQtOeKK1UzWZyol6mnlHswKMPPCVgr25vvxWdYWFJqUYTrR8Zys7iVAqUnpx26se3XH/e93fooiJYWjPshNRXQmCjvxoCDfgw5RV8kHTjiiM3EwoWR1WYz1O2UFFYn65LTwIDAQAB"
 }

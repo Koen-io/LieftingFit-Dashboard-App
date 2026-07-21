@@ -63,7 +63,7 @@ if (IS_EXTENSION) {
       return true;
     }
     if (msg.action === "dayInfo") {
-      dayInfo(msg.type).then(sendResponse).catch(function () { sendResponse({ ok: false }); });
+      dayInfo(msg.type, msg.rooster).then(sendResponse).catch(function () { sendResponse({ ok: false }); });
       return true;
     }
     if (msg.action === "openClass") {
@@ -285,6 +285,15 @@ function nowAndNext(list) {
 }
 
 // Trimmed for messaging — never ship participant data to a content script.
+//
+// NB: ruimte / trainer / type come back as OBJECTS ({naam: "Hoofdruimte"}),
+// not strings. Passing them through rendered a literal "[object Object]" next
+// to the class in the Nu/Hierna strip. Always unwrap .naam.
+function nameOf(v) {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  return v.naam || "";
+}
 function slimEvent(e) {
   if (!e) return null;
   return {
@@ -292,7 +301,12 @@ function slimEvent(e) {
     titel: e.titel,
     start: hhmm(startMinutes(e)),
     eind: hhmm(endMinutes(e)),
-    ruimte: e.ruimte || ""
+    ruimte: nameOf(e.ruimte),
+    trainer: nameOf(e.trainer),
+    // The API's own class-type id — stabler than matching on names.
+    typeId: e.type && e.type.id != null ? e.type.id : null,
+    typeNaam: nameOf(e.type),
+    kleur: (e.type && e.type.hexkleur) || null
   };
 }
 
@@ -358,11 +372,51 @@ function rosterFilterName(roster) {
   return naam || String(roster.selectedRoosterId);
 }
 
+/* ---- Which classes belong to which zaal ----
+ *
+ * The dashboard downstairs should only offer the classes that actually run
+ * downstairs. The API cannot be asked "what runs in zaal X" directly — it only
+ * ever returns the roster selected in the session — so the mapping is LEARNED:
+ * every time a fetch happens with a specific roster selected, the class names it
+ * returned are recorded against that roster. It fills itself in as the Rooster
+ * tile gets used, and is seeded with a first day's observation.
+ *
+ * Stored as { "<roosterNaam>": ["CrossFit", "Hyrox", …] }, union-merged so a
+ * quiet Monday never deletes what Wednesday taught us.
+ */
+var ROSTER_TYPES_KEY = "rosterTypeMap";
+
+async function readRosterTypeMap() {
+  try { return (await chrome.storage.local.get(ROSTER_TYPES_KEY))[ROSTER_TYPES_KEY] || {}; }
+  catch (e) { return {}; }
+}
+
+async function learnRosterTypes(roosterNaam, events) {
+  if (!roosterNaam || !events || !events.length) return;
+  var map = await readRosterTypeMap();
+  var have = map[roosterNaam] || [];
+  var seen = {};
+  have.forEach(function (t) { seen[normName(t)] = t; });
+  events.forEach(function (e) {
+    var t = e.titel;
+    if (t && !seen[normName(t)]) seen[normName(t)] = t;
+  });
+  map[roosterNaam] = Object.keys(seen).map(function (k) { return seen[k]; }).sort();
+  var obj = {}; obj[ROSTER_TYPES_KEY] = map;
+  try { await chrome.storage.local.set(obj); } catch (e) {}
+}
+
 /* Today's events, plus whether that list is COMPLETE (covers every location).
  * Only a complete list may be used to conclude "this class does not exist". */
 async function getTodayEvents() {
   var live = null;
   try { live = await fetchTodayRoster(); } catch (e) { live = null; }
+
+  if (live) await rememberRosters(live.roosters);
+  if (live && live.selectedRoosterId != null) {
+    // Filtered view — exactly the thing that teaches us this zaal's classes.
+    await learnRosterTypes(rosterFilterName(live), live.events);
+  }
 
   if (live && live.selectedRoosterId == null) {
     await writeRosterCache(live.events);           // full view — remember it
@@ -383,12 +437,30 @@ async function getTodayEvents() {
 
 /* Everything the dashboard and titlebar need to show "what's on now".
  * `type` is optional: without it, answers for the gym as a whole ("Nu bezig"). */
-async function dayInfo(type) {
+async function dayInfo(type, roosterNaam) {
   var cfg = await loadConfigForBackground();
   var day = await getTodayEvents();
   if (!day) return { ok: false };
 
-  var all = day.events.slice().sort(function (a, b) {
+  // Restrict to the zaal the dashboard is set to. The gym's TVs are all
+  // downstairs, so a trainer there should never be offered — or warned about —
+  // a class running upstairs. "Alle roosters" (or an unknown zaal) means no
+  // filtering, so nothing is ever silently hidden.
+  var events = day.events;
+  var allowed = null;
+  if (roosterNaam && !/^alle/i.test(roosterNaam)) {
+    var map = await readRosterTypeMap();
+    var seedList = (cfg && cfg.rosterTypes && cfg.rosterTypes[roosterNaam]) || [];
+    var learned = map[roosterNaam] || [];
+    var union = seedList.concat(learned);
+    if (union.length) {
+      allowed = {};
+      union.forEach(function (t) { allowed[normName(t)] = true; });
+      events = events.filter(function (e) { return allowed[normName(e.titel)]; });
+    }
+  }
+
+  var all = events.slice().sort(function (a, b) {
     return (startMinutes(a) || 0) - (startMinutes(b) || 0);
   });
   var anyNow = nowAndNext(all);
@@ -405,7 +477,7 @@ async function dayInfo(type) {
         return first;
       })()
     };
-    var list = classesOfType(day.events, ctx);
+    var list = classesOfType(events, ctx);
     var nn = nowAndNext(list);
     forType = {
       count: list.length,
@@ -424,8 +496,38 @@ async function dayInfo(type) {
     anyCurrent: slimEvent(anyNow.current),
     anyNext: slimEvent(anyNow.next),
     suggestTitle: (anyNow.current && anyNow.current.titel) || (upcoming[0] && upcoming[0].titel) || null,
-    forType: forType
+    forType: forType,
+    // Every class name known for this zaal — the dashboard uses it to narrow
+    // the Actief lestype dropdown to what actually runs there.
+    zaalTypes: await typesForRooster(cfg, roosterNaam),
+    // For the zaal picker itself.
+    rosters: (await lastKnownRosters()) || []
   };
+}
+
+// Seed (config) ∪ learned (storage) for one zaal; null when unfiltered.
+async function typesForRooster(cfg, roosterNaam) {
+  if (!roosterNaam || /^alle/i.test(roosterNaam)) return null;
+  var map = await readRosterTypeMap();
+  var seedList = (cfg && cfg.rosterTypes && cfg.rosterTypes[roosterNaam]) || [];
+  var learned = map[roosterNaam] || [];
+  var seen = {};
+  seedList.concat(learned).forEach(function (t) { if (t) seen[normName(t)] = t; });
+  var out = Object.keys(seen).map(function (k) { return seen[k]; }).sort();
+  return out.length ? out : null;
+}
+
+/* The zaal list comes from the roster API, but the dashboard needs it even when
+ * that call is slow or offline — so the last known list is cached. */
+var ROSTERS_KEY = "knownRosters";
+async function lastKnownRosters() {
+  try { return (await chrome.storage.local.get(ROSTERS_KEY))[ROSTERS_KEY] || []; }
+  catch (e) { return []; }
+}
+async function rememberRosters(list) {
+  if (!list || !list.length) return;
+  var obj = {}; obj[ROSTERS_KEY] = list.map(function (r) { return { id: r.id, naam: r.naam }; });
+  try { await chrome.storage.local.set(obj); } catch (e) {}
 }
 
 async function openClassById(id, tabId) {

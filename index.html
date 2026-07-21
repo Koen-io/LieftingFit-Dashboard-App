@@ -24,6 +24,9 @@
 
     <div class="topbar-actions">
       <span class="room-badge" id="roomBadge" hidden></span>
+      <button class="icon-btn" id="btnFeedback" title="Feedback sturen" aria-label="Feedback sturen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </button>
       <button class="icon-btn" id="btnCastHelp" title="Casten naar de TV (?)" aria-label="Cast-hulp">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20h.01M2 16a6 6 0 0 1 6 6M2 12a10 10 0 0 1 10 10M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-6"/></svg>
       </button>
@@ -44,12 +47,21 @@
        Filled by renderNowNext(); hidden until the roster answers. -->
   <section class="nownext" id="nowNext" hidden></section>
 
+  <!-- Two steps: first the zaal, then the class type that runs there. The
+       zaal narrows the type list, so the order is deliberate. -->
   <section class="context-bar" id="contextBar">
-    <div class="context-label">
-      <svg viewBox="0 0 24 24" aria-hidden="true" class="rb-icon"><path d="M6 6v12M3 8v8M18 6v12M21 8v8M6 12h12"/></svg>
-      <span>Actief lestype</span>
+    <div class="step">
+      <span class="step-num">1</span>
+      <select id="roosterSelect" class="type-select" aria-label="Kies rooster / zaal"></select>
     </div>
-    <select id="typeSelect" class="type-select" aria-label="Kies lestype"></select>
+    <div class="step">
+      <span class="step-num">2</span>
+      <div class="context-label">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="rb-icon"><path d="M6 6v12M3 8v8M18 6v12M21 8v8M6 12h12"/></svg>
+        <span>Actief lestype</span>
+      </div>
+      <select id="typeSelect" class="type-select" aria-label="Kies lestype"></select>
+    </div>
     <div class="context-hint" id="contextHint">De knoppen hieronder werken op de les van dit type.</div>
   </section>
 
@@ -114,6 +126,52 @@
     <div class="modal-foot">
       <div class="foot-right" style="margin-left:auto">
         <button class="btn btn-primary" data-close>Ander lestype kiezen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Warning before the shortcut editor. These settings can break the dashboard,
+     so getting there is deliberate rather than accidental. -->
+<div class="modal-overlay" id="expertModal" hidden>
+  <div class="modal modal-narrow" role="alertdialog" aria-modal="true" aria-labelledby="expertTitle">
+    <div class="modal-head">
+      <h2 id="expertTitle">⚠️ Expertmodus</h2>
+      <button class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="noclass-lead">Je staat op het punt de <b>snelkoppelingen</b> aan te passen.</p>
+      <p class="help-text help-warn">
+        Deze instellingen bepalen hóe de knoppen werken. Als je hier iets verandert
+        zonder te weten wat je doet, kan het dashboard <b>niet meer goed werken</b> —
+        knoppen openen dan het verkeerde scherm of helemaal niets.
+      </p>
+      <p class="help-text">
+        Er wordt automatisch een back-up bewaard. Ging er iets mis? Gebruik dan
+        <b>Herstel back-up</b> onderaan de instellingen.
+      </p>
+    </div>
+    <div class="modal-foot">
+      <div class="foot-right" style="margin-left:auto">
+        <button class="btn btn-ghost" data-close>Annuleren</button>
+        <button class="btn btn-danger btn-primary" id="btnExpertConfirm">Ik weet wat ik doe</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback (Web3Forms) -->
+<div class="modal-overlay" id="feedbackModal" hidden>
+  <div class="modal modal-narrow" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+    <div class="modal-head">
+      <h2 id="feedbackTitle">Feedback sturen</h2>
+      <button class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="modal-body" id="feedbackBody"><!-- injected --></div>
+    <div class="modal-foot">
+      <div class="foot-right" style="margin-left:auto">
+        <button class="btn btn-ghost" data-close>Annuleren</button>
+        <button class="btn btn-primary" id="btnFeedbackSend">Versturen</button>
       </div>
     </div>
   </div>
