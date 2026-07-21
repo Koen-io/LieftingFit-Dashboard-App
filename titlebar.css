@@ -228,3 +228,8 @@ html.lf-has-titlebar body:has(#lf-titlebar.lf-autohide) { padding-top: 6px !impo
   font-weight: 700 !important;
 }
 #lf-titlebar .lf-next:hover { background: #243a2a !important; border-color: #3f7047 !important; }
+
+/* `display: inline-flex !important` on .lf-btn outranks the hidden attribute,
+   so the (normally hidden) "Volgende les" button showed as a stray green box.
+   Hidden must mean hidden here too. */
+#lf-titlebar [hidden] { display: none !important; }

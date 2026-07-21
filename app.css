@@ -486,9 +486,12 @@ body::before {
   pointer-events: none;
   z-index: 0;
 }
-/* Keep all real content above the mark. */
-#app, .modal-overlay, .toast, .busy { position: relative; z-index: 1; }
-.modal-overlay, .busy { z-index: 60; }
+/* Keep real content above the mark.
+   ONLY #app gets position:relative here. Overlays (.modal-overlay, .toast,
+   .busy) are already position:fixed; forcing them to relative dropped them
+   into normal flow, so Instellingen and Feedback rendered at the BOTTOM of the
+   page instead of floating over it. Set the stacking, never the positioning. */
+#app { position: relative; z-index: 1; }
 
 @media (max-width: 700px) { body::before { width: 92vmin; height: 92vmin; opacity: 0.03; } }
 

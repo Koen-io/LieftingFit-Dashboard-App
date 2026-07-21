@@ -13,6 +13,7 @@
     calendar: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
     edit:     '<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
     cart:     '<svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>',
+    users:    '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
     dumbbell: '<svg viewBox="0 0 24 24"><path d="M6 6v12M3 8v8M18 6v12M21 8v8M6 12h12"/></svg>',
     link:     '<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>',
     cast:     '<svg viewBox="0 0 24 24"><path d="M2 20h.01M2 16a6 6 0 0 1 6 6M2 12a10 10 0 0 1 10 10M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-6"/></svg>',
@@ -68,18 +69,20 @@
     // Seed of "which classes run in which zaal". Measured from the live roster;
     // the extension keeps learning and merges what it sees, so this only has to
     // be roughly right. Editable in Settings.
+    // Seeded from what was actually OBSERVED in Sportbit, not guessed — a wrong
+    // guess here shows a trainer downstairs a class that only runs upstairs,
+    // which is exactly what this list exists to prevent. Anything not yet
+    // placed appears under "Overig" rather than being silently lost, and the
+    // extension overwrites these lists with what it learns from the live
+    // roster. Editable in Settings → Lestypes per zaal.
     rosterTypes: {
       "Gym - beneden": [
-        "60+ training", "Booty", "Booty daluren", "Calisthenics", "Core", "CoreFit",
-        "CrossFit", "Crossfit Daluren", "CrossFit open", "Fitness", "FitnessFit",
-        "Hyrox", "Hyrox daluren", "Hyrox strength", "Kettlebell Training",
-        "Olympic weightlifting", "OpenGym", "Powerliften", "PRVN Burn", "Strength",
-        "TRX", "TRX Daluren", "Trx training", "Trx / Booty mix"
+        "60+ training", "CrossFit", "Crossfit Daluren", "CrossFit open",
+        "Hyrox", "Hyrox daluren", "Hyrox strength", "OpenGym"
       ],
       "Gym - bokszaal": [
         "Advanced Kickboxing", "Boksen", "brazilian jiu jitsu", "Kickboksen",
-        "Kickboksen (daluren)", "Sparren (kickboksen)", "TeenFit kickboksen",
-        "Trx", "Yoga", "Specialty class: Pilates"
+        "Kickboksen (daluren)", "Sparren (kickboksen)", "Trx", "Yoga"
       ],
       "Gym - KidsFit / TeenFit": [
         "Calisthenics Kids & Teens", "Junior Powerliften", "KidsFit",
@@ -210,6 +213,24 @@
             { type: "navigate", url: "https://lieftingfit.sportbitapp.nl/web/nl/events" },
             { type: "click", selectors: [["mat-select"]] },
             { type: "click", selectors: [["text/{{ROSTER}}"]] }
+          ]
+        }
+      },
+      {
+        // Members are managed in Dexos, not the web portal: Planning →
+        // Groepslessen → select the class → Bekijk / Wijzig → Deelnemers.
+        // The dropdown below picks WHICH class (today only, of the selected
+        // type), so the trainer lands on the right one.
+        id: "leden", label: "Leden toevoegen", sub: "Dexos · Deelnemers beheren",
+        icon: "users", accent: "cyan", cast: false, contextMode: "none",
+        url: "https://lieftingfit.sportbitapp.nl/dexos/",
+        classPicker: true,          // filled at render time from today's roster
+        macro: {
+          startUrl: "https://lieftingfit.sportbitapp.nl/dexos/",
+          steps: [
+            { type: "navigate", url: "https://lieftingfit.sportbitapp.nl/dexos/" },
+            { type: "click", selectors: [["text/Planning"]] },
+            { type: "click", selectors: [["text/GROEPSLESSEN"], ["has/GROEPSLESSEN"]] }
           ]
         }
       },
@@ -345,6 +366,15 @@
   // match any tile containing it.
   function normType(s) {
     return String(s == null ? "" : s).replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  // Has the trainer chosen a zaal/lestype by hand in this tab?
+  var MANUAL_KEY = "lf.manualPick";
+  function manualPick() {
+    try { return sessionStorage.getItem(MANUAL_KEY) === "1"; } catch (e) { return false; }
+  }
+  function markManualPick() {
+    try { sessionStorage.setItem(MANUAL_KEY, "1"); } catch (e) {}
   }
 
   var BASE_STOPWORDS = ["the", "de", "het", "een", "van", "voor", "en", "zaal"];
@@ -557,7 +587,7 @@
     var nameWrap = el("label", { "class": "set-field" });
     nameWrap.appendChild(el("span", null, 'Je naam <span class="req">*</span>'));
     var nameIn = el("input", { type: "text", id: "fbName", autocomplete: "name",
-                               placeholder: "Bijv. Pelle" });
+                               placeholder: "Bijv. Jan Jansen" });
     nameWrap.appendChild(nameIn);
     body.appendChild(nameWrap);
 
@@ -722,6 +752,46 @@
         if (!fallbackUrl) { if (e) e.preventDefault(); toast("Geen URL ingesteld — open Instellingen"); }
       }
 
+      // "Leden toevoegen" carries a picker of TODAY's classes of the selected
+      // type — same look as the Rooster picker. Times come from the live roster,
+      // so a class that is not on today's schedule can never be offered.
+      if (s.classPicker && IS_EXT) {
+        var classes = (dayCache && dayCache.forType && dayCache.forType.all) || [];
+        var cp = el("select", { "class": "tile-roster", "aria-label": "Kies les" });
+        if (!classes.length) {
+          cp.appendChild(el("option", { value: "" }, "Geen les vandaag"));
+          cp.disabled = true;
+        } else {
+          classes.forEach(function (c) {
+            var label = c.titel + " · " + c.start + (c.eind ? "–" + c.eind : "");
+            var opt = el("option", { value: String(c.id) }, escapeHtml(label));
+            if (String(s.selectedClassId) === String(c.id)) opt.selected = true;
+            cp.appendChild(opt);
+          });
+          if (!s.selectedClassId || !classes.some(function (c) { return String(c.id) === String(s.selectedClassId); })) {
+            // Default to what is running now, else the next one.
+            var pref = (dayCache.forType.current || dayCache.forType.next || classes[0]);
+            s.selectedClassId = pref.id;
+            cp.value = String(pref.id);
+          }
+        }
+        cp.addEventListener("change", function (e) {
+          e.stopPropagation();
+          s.selectedClassId = cp.value;
+          saveConfig(config);
+          toast("Les gekozen: " + cp.options[cp.selectedIndex].textContent);
+        });
+        ["click", "mousedown", "keydown"].forEach(function (evt) {
+          cp.addEventListener(evt, function (e) { e.stopPropagation(); });
+        });
+        tile.classList.add("tile-has-picker");
+        tile.querySelector(".tile-top").addEventListener("click", function (e) { activate(e); });
+        tile.querySelector(".tile-body").addEventListener("click", function (e) { activate(e); });
+        tile.appendChild(cp);
+        grid.appendChild(tile);
+        return;                     // handled — skip the generic wiring below
+      }
+
       // The Rooster tile carries its own picker instead of the {{TYPE}} chip.
       // Only the tile BODY opens the roster; the picker is a sibling, so using
       // it never triggers navigation.
@@ -825,36 +895,68 @@
   // The class types available in the selected zaal. Falls back to the full list
   // for "Alle roosters", or when nothing is known about a zaal yet — better a
   // long list than an empty one.
+  // Types belonging to the chosen zaal, and everything not yet assigned to any
+  // zaal. The second group is kept reachable (as "Overig") rather than hidden:
+  // a class nobody has categorised yet should not become unreachable.
   function typesForCurrentRooster() {
     var r = config.selectedRooster;
-    if (!r || /^alle/i.test(r)) return config.classTypes;
+    if (!r || /^alle/i.test(r)) return { zaal: config.classTypes, overig: [] };
+
     var known = (dayCache && dayCache.zaalTypes) || (config.rosterTypes && config.rosterTypes[r]) || [];
-    if (!known.length) return config.classTypes;
+    if (!known.length) return { zaal: config.classTypes, overig: [] };
+
     var set = {};
     known.forEach(function (t) { set[normType(t)] = true; });
-    // Keep the dashboard's own spelling and ordering; match on the roster's.
-    var out = config.classTypes.filter(function (t) {
+    function inZaal(t) {
       if (set[normType(t)]) return true;
       var alias = config.rosterAliases && config.rosterAliases[t];
       return !!(alias && set[normType(alias)]);
+    }
+
+    // Assigned to SOME zaal — used to work out what is still uncategorised.
+    var assigned = {};
+    Object.keys(config.rosterTypes || {}).forEach(function (z) {
+      (config.rosterTypes[z] || []).forEach(function (t) { assigned[normType(t)] = true; });
     });
-    return out.length ? out : config.classTypes;
+
+    var zaal = [], overig = [];
+    config.classTypes.forEach(function (t) {
+      if (inZaal(t)) { zaal.push(t); return; }
+      var alias = config.rosterAliases && config.rosterAliases[t];
+      var isAssigned = assigned[normType(t)] || (alias && assigned[normType(alias)]);
+      if (!isAssigned) overig.push(t);
+    });
+    if (!zaal.length && !overig.length) return { zaal: config.classTypes, overig: [] };
+    return { zaal: zaal, overig: overig };
   }
 
   // Step 2 — the class type, narrowed to what runs in the chosen zaal.
   function renderTypeSelect() {
     var sel = $("#typeSelect");
     if (!sel) return;
-    var list = typesForCurrentRooster();
-    if (list.indexOf(config.selectedType) < 0) {
-      config.selectedType = list[0];      // the old pick is not offered here
+    var groups = typesForCurrentRooster();
+    var all = groups.zaal.concat(groups.overig);
+    if (all.indexOf(config.selectedType) < 0) {
+      config.selectedType = all[0];       // the old pick is not offered here
     }
     sel.innerHTML = "";
-    list.forEach(function (name) {
-      var opt = el("option", { value: name }, escapeHtml(name));
-      if (name === config.selectedType) opt.selected = true;
-      sel.appendChild(opt);
-    });
+    function addOpts(parent, names) {
+      names.forEach(function (name) {
+        var opt = el("option", { value: name }, escapeHtml(name));
+        if (name === config.selectedType) opt.selected = true;
+        parent.appendChild(opt);
+      });
+    }
+    if (groups.overig.length && groups.zaal.length) {
+      var g1 = el("optgroup", { label: config.selectedRooster });
+      addOpts(g1, groups.zaal);
+      sel.appendChild(g1);
+      var g2 = el("optgroup", { label: "Overig (nog niet ingedeeld)" });
+      addOpts(g2, groups.overig);
+      sel.appendChild(g2);
+    } else {
+      addOpts(sel, all);
+    }
     var hint = $("#contextHint");
     if (hint) {
       hint.textContent = /^alle/i.test(config.selectedRooster || "")
@@ -924,7 +1026,7 @@
    * — that is the honest limit of what an unpacked extension can do for itself.
    */
   var VERSION_URL =
-    "https://raw.githubusercontent.com/Koen-io/LieftingFit-Dashboard-App/claude/crossfit-hyrox-gym-p9cawx/manifest.json";
+    "https://raw.githubusercontent.com/Koen-io/LieftingFit-Dashboard-App/main/manifest.json";
 
   function cmpVersions(a, b) {
     var pa = String(a).split("."), pb = String(b).split(".");
@@ -1383,6 +1485,15 @@
             // next — but only on arrival, so it never yanks the dropdown out
             // from under someone who has just chosen deliberately.
             if (!config.autoSelectType) return;
+            // Never override a deliberate choice.
+            //
+            // Coming back from Weekprogramma reloads this page, which re-ran
+            // auto-select and silently swapped "Advanced Kickboxing" for
+            // whatever was running. The flag lives in sessionStorage, so it is
+            // per TAB and survives navigating out to Dexos and back, while a
+            // genuinely new tab (or a new day's session) still gets the
+            // convenience of a sensible default.
+            if (manualPick()) return;
             if (!d || !d.suggestTitle) return;
             var match = null;
             config.classTypes.forEach(function (t) {
@@ -1418,6 +1529,7 @@
     $("#hintCast").addEventListener("click", function () { buildCastHelp(); show("#castModal"); });
 
     $("#roosterSelect").addEventListener("change", function () {
+      markManualPick();
       config.selectedRooster = $("#roosterSelect").value;
       saveConfig(config);
       renderTypeSelect();     // step 2 depends on step 1
@@ -1427,6 +1539,7 @@
     });
 
     $("#typeSelect").addEventListener("change", function () {
+      markManualPick();
       config.selectedType = $("#typeSelect").value;
       saveConfig(config);
       renderTiles(); // refresh the "Vandaag · <type>" chips

@@ -447,15 +447,11 @@ async function dayInfo(type, roosterNaam) {
   // a class running upstairs. "Alle roosters" (or an unknown zaal) means no
   // filtering, so nothing is ever silently hidden.
   var events = day.events;
-  var allowed = null;
   if (roosterNaam && !/^alle/i.test(roosterNaam)) {
-    var map = await readRosterTypeMap();
-    var seedList = (cfg && cfg.rosterTypes && cfg.rosterTypes[roosterNaam]) || [];
-    var learned = map[roosterNaam] || [];
-    var union = seedList.concat(learned);
-    if (union.length) {
-      allowed = {};
-      union.forEach(function (t) { allowed[normName(t)] = true; });
+    var list = await typesForRooster(cfg, roosterNaam);
+    if (list && list.length) {
+      var allowed = {};
+      list.forEach(function (t) { allowed[normName(t)] = true; });
       events = events.filter(function (e) { return allowed[normName(e.titel)]; });
     }
   }
@@ -506,15 +502,19 @@ async function dayInfo(type, roosterNaam) {
 }
 
 // Seed (config) ∪ learned (storage) for one zaal; null when unfiltered.
+/* Learned data WINS over the seed once it exists.
+ *
+ * The seed is a hand-written starting point and can be wrong; what the live
+ * roster actually returned for a zaal cannot. Unioning the two meant one bad
+ * seed entry permanently offered an upstairs class to a downstairs trainer. So
+ * the seed only fills in for zalen that have never been observed. */
 async function typesForRooster(cfg, roosterNaam) {
   if (!roosterNaam || /^alle/i.test(roosterNaam)) return null;
   var map = await readRosterTypeMap();
-  var seedList = (cfg && cfg.rosterTypes && cfg.rosterTypes[roosterNaam]) || [];
   var learned = map[roosterNaam] || [];
-  var seen = {};
-  seedList.concat(learned).forEach(function (t) { if (t) seen[normName(t)] = t; });
-  var out = Object.keys(seen).map(function (k) { return seen[k]; }).sort();
-  return out.length ? out : null;
+  if (learned.length) return learned.slice().sort();
+  var seedList = (cfg && cfg.rosterTypes && cfg.rosterTypes[roosterNaam]) || [];
+  return seedList.length ? seedList.slice().sort() : null;
 }
 
 /* The zaal list comes from the roster API, but the dashboard needs it even when
