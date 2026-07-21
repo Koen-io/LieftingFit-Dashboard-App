@@ -559,12 +559,27 @@
       return d;
     }
 
-    if (!ft || !ft.count) {
+    // Nu / Hierna describe the ROOM, not the selected type.
+    //
+    // These used to show the current and next class of the selected type only,
+    // so after a CrossFit class "Hierna" skipped the HYROX that actually
+    // follows and jumped to the next CrossFit — or showed nothing. A trainer
+    // reading this strip wants to know what is happening in their zaal next,
+    // whatever it is. The zaal filter still applies, so nothing from upstairs
+    // appears.
+    var nowEv = dayCache.anyCurrent;
+    var nextEv = dayCache.anyNext;
+    if (!nowEv && !nextEv) {
       box.appendChild(el("div", { "class": "nn-none" },
-        "Vandaag geen les van dit type in het rooster."));
+        "Vandaag staat er niets meer in dit rooster."));
     } else {
-      box.appendChild(slot("now", ft.current));
-      box.appendChild(slot("next", ft.next));
+      box.appendChild(slot("now", nowEv));
+      box.appendChild(slot("next", nextEv));
+    }
+    // Still tell them where the selected type sits, if it runs today at all.
+    if (ft && ft.count && ft.next) {
+      box.appendChild(el("div", { "class": "nn-type-hint" },
+        "Volgende " + escapeHtml(config.selectedType) + ": " + escapeHtml(ft.next.start)));
     }
 
     if (dayCache.filterName) {

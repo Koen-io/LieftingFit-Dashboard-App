@@ -121,6 +121,26 @@ if (IS_EXTENSION) {
   })();
 }
 
+/* Keep the Sportbit session alive.
+ *
+ * The dashboard sits idle on a gym laptop for hours, so the session quietly
+ * expires and the next button press lands on the login page — which is what
+ * auto-login then has to rescue. Preventing the logout is better than
+ * recovering from it. Sportbit's own front-end pings this endpoint; doing the
+ * same from the service worker keeps the cookie fresh with one tiny request.
+ */
+if (IS_EXTENSION) {
+  var HEARTBEAT_URL = "https://lieftingfit.sportbitapp.nl/cbm/api/data/heartbeat/?taalIso=nl";
+  function beat() {
+    fetch(HEARTBEAT_URL, { credentials: "include", cache: "no-store" }).catch(function () {});
+  }
+  try {
+    chrome.alarms.create("lfHeartbeat", { periodInMinutes: 10 });
+    chrome.alarms.onAlarm.addListener(function (a) { if (a.name === "lfHeartbeat") beat(); });
+  } catch (e) {}
+  beat();
+}
+
 /* ---------------- Room tabs ----------------
  * Chrome casts a whole TAB, so three TVs showing different things need three
  * separate tabs, each cast once. The mapping lives in storage.session (not a
@@ -163,6 +183,10 @@ async function openRoom(zaal) {
     } catch (e) { /* fall through and open a new one */ }
   }
   var tab = await chrome.tabs.create({ url: dashboardUrl(zaal), active: true });
+  // Maximise the window a zaal opens in. The trainer needs the Chrome tab strip
+  // and the cast menu, so this is a maximised WINDOW — not fullscreen, which
+  // would hide exactly the controls they came for.
+  try { await chrome.windows.update(tab.windowId, { state: "maximized" }); } catch (e) {}
   rooms[zaal] = tab.id;
   await setRooms(rooms);
   return { ok: true, tabId: tab.id, reused: false };

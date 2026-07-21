@@ -88,13 +88,35 @@
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  /* The guard has to stop a SUBMIT LOOP without also disabling auto-login for
+   * the rest of the tab's life.
+   *
+   * It used to set a permanent per-tab flag: one attempt, ever. So if a login
+   * did not take — a slow form, a session that dropped later in the shift — the
+   * trainer was shown the login page and auto-login stayed switched off until
+   * they opened a new tab. That is the "sometimes I have to type it again".
+   *
+   * Now the flag carries a timestamp and expires, so a genuinely new login
+   * later on is handled, while two attempts in quick succession still cannot
+   * happen. It is also cleared as soon as we are off the login page. */
+  var ATTEMPT_TTL = 90000;   // ms
+
   function alreadyAttempted() {
     if (attempted) return true;
-    try { return sessionStorage.getItem(ATTEMPT_FLAG) === "1"; } catch (e) { return false; }
+    try {
+      var v = parseInt(sessionStorage.getItem(ATTEMPT_FLAG) || "0", 10);
+      if (!v) return false;
+      if (Date.now() - v > ATTEMPT_TTL) { sessionStorage.removeItem(ATTEMPT_FLAG); return false; }
+      return true;
+    } catch (e) { return false; }
   }
   function markAttempted() {
     attempted = true;
-    try { sessionStorage.setItem(ATTEMPT_FLAG, "1"); } catch (e) {}
+    try { sessionStorage.setItem(ATTEMPT_FLAG, String(Date.now())); } catch (e) {}
+  }
+  function clearAttempt() {
+    attempted = false;
+    try { sessionStorage.removeItem(ATTEMPT_FLAG); } catch (e) {}
   }
 
   function tell(text, bad) {
@@ -104,9 +126,9 @@
   }
 
   function tryLogin() {
-    if (alreadyAttempted()) return;
     var f = looksLikeLogin();
-    if (!f) return;
+    if (!f) { clearAttempt(); return; }   // off the login page → guard resets
+    if (alreadyAttempted()) return;
 
     chrome.storage.local.get(CREDS_KEY, function (r) {
       void chrome.runtime.lastError;

@@ -508,3 +508,4 @@ body::before {
    `display:none`, so hidden bars still reserved space and showed as empty
    rounded boxes. Make hidden mean hidden. */
 [hidden] { display: none !important; }
+.nn-type-hint { color: var(--muted-2); font-size: 12.5px; margin-left: 4px; }
