@@ -1,52 +1,44 @@
 #!/bin/bash
-# Opens Chrome on the LieftingFit dashboard, in macOS fullscreen.
+# Opens Chrome on the LieftingFit dashboard, filling the screen with Chrome's
+# tab strip and toolbar still visible.
 #
-# Why AppleScript and not a Chrome flag or the extension API:
-#   --start-fullscreen        -> Chrome's PRESENTATION fullscreen: no tab strip.
-#   chrome.windows "fullscreen" -> same thing; the tabs disappear.
-# Both hide the cast menu, which is the one control the trainer needs.
+# Why NOT any kind of fullscreen:
+#   --start-fullscreen            -> hides the tab strip.
+#   chrome.windows "fullscreen"   -> same.
+#   AXFullScreen (green button)   -> macOS fullscreen, but Chrome then hides its
+#                                    toolbar unless the per-profile setting
+#                                    "Always Show Toolbar in Full Screen" is on,
+#                                    which only the user can toggle.
 #
-# The green button is a macOS window attribute (AXFullScreen), not a Chrome
-# mode, so only the OS can set it. That keeps Chrome's tab strip and toolbar
-# while hiding the Mac menubar.
-#
-# Requires Accessibility permission for this app once, the first time.
+# So instead: a NORMAL window sized to the whole screen, plus the macOS menubar
+# set to auto-hide system-wide. Same result - no menubar, tabs visible - with
+# nothing left for the trainer to configure.
 EXT_ID="odppaoogblejdfldnlfacbeiomckheej"
 URL="chrome-extension://${EXT_ID}/index.html"
 
 open -na "Google Chrome" --args --new-window "$URL"
 
-# Wait for the window to exist before touching it. Polls rather than sleeping a
-# fixed amount, so a cold Chrome start is handled without a long delay.
+# Wait for the window, then size it to the full screen. Chrome's own scripting
+# does this - no Accessibility permission needed, unlike AXFullScreen.
 for i in $(seq 1 40); do
   if osascript -e 'tell application "Google Chrome" to count windows' 2>/dev/null | grep -qv '^0$'; then
     break
   fi
   sleep 0.25
 done
-sleep 0.6   # let the window finish opening before changing its attribute
+sleep 0.6
 
 osascript <<'APPLESCRIPT' 2>/dev/null
--- Chrome must be frontmost or System Events reports zero windows ("invalid
--- index"), so activate and give it a moment before touching anything.
-tell application "Google Chrome" to activate
-delay 0.8
-
-tell application "System Events"
-  tell process "Google Chrome"
-    -- Target the DASHBOARD window by title, not "front window": with several
-    -- Chrome windows open, front window is often something else entirely and
-    -- would be sent fullscreen instead.
-    repeat with w in windows
-      try
-        if name of w contains "Trainer Dashboard" then
-          if value of attribute "AXFullScreen" of w is false then
-            set value of attribute "AXFullScreen" of w to true
-          end if
-          exit repeat
-        end if
-      end try
-    end repeat
-  end tell
+set {sw, sh} to {0, 0}
+tell application "Finder" to set {_a, _b, sw, sh} to bounds of window of desktop
+tell application "Google Chrome"
+  repeat with w in windows
+    try
+      if title of active tab of w contains "Trainer Dashboard" then
+        set bounds of w to {0, 0, sw, sh}
+        exit repeat
+      end if
+    end try
+  end repeat
 end tell
 APPLESCRIPT
