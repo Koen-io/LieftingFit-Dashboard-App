@@ -58,6 +58,15 @@ if (IS_EXTENSION) {
       });
       return true;
     }
+    if (msg.action === "ledenFocus") {
+      // Which class the open "Deelnemer toevoegen" dialog belongs to, so the
+      // spotlight titlebar can name it.
+      chrome.storage.session.get("ledenFocus").then(function (r) {
+        var map = (r && r.ledenFocus) || {};
+        sendResponse(map[String(tabId)] || {});
+      }).catch(function () { sendResponse({}); });
+      return true;
+    }
     if (msg.action === "amIBusy") {
       isBusy(tabId).then(function (v) { sendResponse({ busy: !!v, label: v ? v.label : "" }); });
       return true;
@@ -605,6 +614,22 @@ async function runTool(toolId, tabId, classIdFromClick) {
       return { ok: false, noClass: true, type: ctx.type,
                reason: "Kies eerst een les in het uitklapmenu op de knop." };
     }
+    // Remember which class this is, for the spotlight titlebar. Resolved from
+    // the roster rather than scraped from Dexos afterwards.
+    try {
+      var dayNow = await getTodayEvents();
+      var picked = null;
+      if (dayNow) {
+        dayNow.events.forEach(function (e) { if (String(e.id) === String(classId)) picked = e; });
+      }
+      var fr = await chrome.storage.session.get("ledenFocus");
+      var fmap = (fr && fr.ledenFocus) || {};
+      fmap[String(tabId)] = picked
+        ? { titel: picked.titel, start: hhmm(startMinutes(picked)) + (endMinutes(picked) != null ? "–" + hhmm(endMinutes(picked)) : "") }
+        : {};
+      await chrome.storage.session.set({ ledenFocus: fmap });
+    } catch (e) {}
+
     var zaal = cfg.selectedRooster || "";
     var ledenSteps = [
       { type: "navigate", url: "https://lieftingfit.sportbitapp.nl/dexos/" },

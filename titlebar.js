@@ -140,6 +140,120 @@
     document.body.appendChild(ov);
   }
 
+  /* ---- Spotlight on "Deelnemer toevoegen" ----
+   *
+   * Dexos shows that dialog on top of the full admin UI: the week grid, the
+   * event popup behind it, the whole left menu. A trainer only needs the one
+   * box. So everything around it is blacked out and a titlebar naming the class
+   * is placed above it.
+   *
+   * Masked with FOUR panels around the dialog's rectangle rather than by
+   * restyling the dialog itself. Dexos owns that node — moving it, or fighting
+   * its z-index inside nested .inner_overlay stacking contexts, risks breaking
+   * its own scripts. Four rectangles touch nothing.
+   *
+   * The dialog grows as options are chosen (member search results, extra
+   * fields), so the rectangles are recomputed continuously.
+   */
+  var FOCUS_ID = "lf-focus";
+  var focusRO = null;
+
+  function findDeelnemerDialog() {
+    var nodes = document.querySelectorAll("div.inner_overlay");
+    // Last match wins: the newest popup is the innermost one.
+    for (var i = nodes.length - 1; i >= 0; i--) {
+      var r = nodes[i].getBoundingClientRect();
+      if (r.width < 120 || r.height < 80) continue;
+      var t = (nodes[i].textContent || "").replace(/\s+/g, " ").trim();
+      if (/^Deelnemer toevoegen/i.test(t)) return nodes[i];
+    }
+    return null;
+  }
+
+  function focusEls() {
+    var host = document.getElementById(FOCUS_ID);
+    if (host) return host;
+    host = document.createElement("div");
+    host.id = FOCUS_ID;
+    ["top", "right", "bottom", "left"].forEach(function (side) {
+      var d = document.createElement("div");
+      d.className = "lf-mask lf-mask-" + side;
+      host.appendChild(d);
+    });
+    var bar = document.createElement("div");
+    bar.className = "lf-focus-bar";
+    bar.innerHTML = '<span class="lf-focus-title"></span><span class="lf-focus-sub"></span>';
+    host.appendChild(bar);
+    document.body.appendChild(host);
+    return host;
+  }
+
+  function clearFocus() {
+    var host = document.getElementById(FOCUS_ID);
+    if (host) host.remove();
+    if (focusRO) { try { focusRO.disconnect(); } catch (e) {} focusRO = null; }
+  }
+
+  function paintFocus() {
+    var dlg = findDeelnemerDialog();
+    if (!dlg) { clearFocus(); return; }
+
+    var host = focusEls();
+    var r = dlg.getBoundingClientRect();
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var pad = 8;                     // a little breathing room around the box
+    var top = Math.max(0, r.top - pad), left = Math.max(0, r.left - pad);
+    var right = Math.min(vw, r.right + pad), bottom = Math.min(vh, r.bottom + pad);
+
+    function set(sel, s) {
+      var n = host.querySelector(sel); if (!n) return;
+      Object.keys(s).forEach(function (k) { n.style.setProperty(k, s[k], "important"); });
+    }
+    set(".lf-mask-top",    { top: "0px", left: "0px", width: vw + "px", height: top + "px" });
+    set(".lf-mask-bottom", { top: bottom + "px", left: "0px", width: vw + "px", height: Math.max(0, vh - bottom) + "px" });
+    set(".lf-mask-left",   { top: top + "px", left: "0px", width: left + "px", height: (bottom - top) + "px" });
+    set(".lf-mask-right",  { top: top + "px", left: right + "px", width: Math.max(0, vw - right) + "px", height: (bottom - top) + "px" });
+
+    // Titlebar sits directly above the box, or just below the top edge if the
+    // dialog is already near the top of the screen.
+    var barH = 46;
+    var barTop = top - barH - 6;
+    if (barTop < barTopMin()) barTop = Math.min(bottom + 6, vh - barH);
+    set(".lf-focus-bar", {
+      top: barTop + "px", left: left + "px",
+      width: Math.max(240, right - left) + "px", height: barH + "px"
+    });
+
+    // Keep it observing this dialog even as it resizes.
+    if (!focusRO && window.ResizeObserver) {
+      focusRO = new ResizeObserver(function () { paintFocus(); });
+      try { focusRO.observe(dlg); } catch (e) {}
+    }
+  }
+  function barTopMin() { return (document.getElementById(BAR_ID) && !autoHide) ? 58 : 6; }
+
+  function setFocusLabel(titel, start) {
+    var host = document.getElementById(FOCUS_ID);
+    if (!host) return;
+    var t = host.querySelector(".lf-focus-title");
+    var s = host.querySelector(".lf-focus-sub");
+    if (t) t.textContent = "Leden toevoegen — " + (titel || "les");
+    if (s) s.textContent = start ? start : "";
+  }
+
+  function syncFocus() {
+    var dlg = findDeelnemerDialog();
+    if (!dlg) { clearFocus(); return; }
+    paintFocus();
+    // The class being edited comes from the background, which resolved it from
+    // the roster when the button was pressed — more trustworthy than scraping
+    // it back out of the Dexos markup.
+    send({ action: "ledenFocus" }, function (res) {
+      if (res && res.titel) setFocusLabel(res.titel, res.start);
+      else setFocusLabel(null, null);
+    });
+  }
+
   function build() {
     var bar = document.createElement("div");
     bar.id = BAR_ID;
@@ -333,6 +447,12 @@
       nudgeFixedTops();
       stampTitle();
     }, 2000);
+
+    // The dialog appears, grows and closes entirely under Dexos's control, so
+    // the mask is re-measured often. Each pass is four style writes.
+    setInterval(syncFocus, 350);
+    window.addEventListener("resize", paintFocus);
+    window.addEventListener("scroll", paintFocus, true);
 
     ["fullscreenchange", "webkitfullscreenchange"].forEach(function (evt) {
       document.addEventListener(evt, syncFullscreen);

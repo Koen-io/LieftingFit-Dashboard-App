@@ -233,3 +233,41 @@ html.lf-has-titlebar body:has(#lf-titlebar.lf-autohide) { padding-top: 6px !impo
    so the (normally hidden) "Volgende les" button showed as a stray green box.
    Hidden must mean hidden here too. */
 #lf-titlebar [hidden] { display: none !important; }
+
+/* ---- Spotlight on the "Deelnemer toevoegen" dialog ----
+   Four panels around the dialog rather than a cut-out: Dexos owns that node and
+   nests it inside .inner_overlay stacking contexts, so restyling or moving it
+   would risk breaking its own scripts. The panels are positioned from JS and
+   re-measured as the dialog grows. */
+#lf-focus { position: static !important; }
+#lf-focus .lf-mask {
+  position: fixed !important;
+  z-index: 2147483640 !important;      /* under the titlebar, over Dexos */
+  background: rgba(6, 8, 11, 0.88) !important;
+  backdrop-filter: blur(2px);
+  pointer-events: auto !important;      /* swallow stray clicks outside */
+}
+#lf-focus .lf-focus-bar {
+  position: fixed !important;
+  z-index: 2147483641 !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 0 16px !important;
+  border-radius: 12px 12px 0 0 !important;
+  background: linear-gradient(180deg, #1b2027, #14181d) !important;
+  border: 1px solid #2b3138 !important;
+  border-bottom: 2px solid #e2673c !important;
+  box-shadow: 0 -6px 30px rgba(0,0,0,0.5) !important;
+  color: #fff !important;
+  font: 700 16px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+}
+#lf-focus .lf-focus-title { color: #fff !important; }
+#lf-focus .lf-focus-sub {
+  color: #ffb894 !important;
+  font-weight: 800 !important;
+  font-variant-numeric: tabular-nums !important;
+}
