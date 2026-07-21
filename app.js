@@ -1659,6 +1659,14 @@
   }
 
   function init() {
+    // Always open at full window size. Asked for here rather than relying on
+    // the launcher's --start-maximized, which Chrome ignores when it is already
+    // running — so the desktop icon alone could not guarantee it.
+    if (IS_EXT) {
+      try {
+        chrome.runtime.sendMessage({ action: "maximizeMe" }, function () { void chrome.runtime.lastError; });
+      } catch (e) {}
+    }
     renderAll();
     // Snapshot today's roster now, while the session is most likely still on
     // "Alle roosters". That snapshot is what keeps Coachboard accurate later,

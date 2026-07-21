@@ -67,6 +67,27 @@ if (IS_EXTENSION) {
       }).catch(function () { sendResponse({}); });
       return true;
     }
+    if (msg.action === "maximizeMe") {
+      // Chrome ignores --start-maximized when it is already running, so the
+      // desktop icon could not guarantee a full-size window on its own. Doing
+      // it here covers every route in: desktop app, toolbar icon, zaal button,
+      // and the reload after a self-update.
+      //
+      // "maximized", never "fullscreen": the trainer needs the tab strip and
+      // the cast menu, which fullscreen hides.
+      if (sender && sender.tab && sender.tab.windowId != null) {
+        chrome.windows.get(sender.tab.windowId).then(function (w) {
+          // Leave a deliberately shrunk window alone only if it is already
+          // maximized; otherwise always size it up.
+          if (w.state !== "maximized" && w.state !== "fullscreen") {
+            return chrome.windows.update(sender.tab.windowId, { state: "maximized" });
+          }
+        }).catch(function () {}).then(function () { sendResponse({ ok: true }); });
+        return true;
+      }
+      sendResponse({ ok: false });
+      return true;
+    }
     if (msg.action === "amIBusy") {
       isBusy(tabId).then(function (v) { sendResponse({ busy: !!v, label: v ? v.label : "" }); });
       return true;
