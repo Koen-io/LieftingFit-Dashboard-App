@@ -62,6 +62,10 @@
     titlebarAutoHide: false,
     // On arrival, preselect the class type that is running or starts next.
     autoSelectType: true,
+    // Hidden from the Nu / Hierna strip only. OpenGym is unmanned floor time
+    // that runs nearly all day, so it would otherwise be permanently "Nu" and
+    // hide the coached classes. Tiles, dropdowns and macros are unaffected.
+    nowNextExclude: ["OpenGym"],
     // Which Sportbit roster (zaal) this dashboard is for. The gym's TVs are all
     // downstairs, so "Gym - beneden" is the sensible default — but the other
     // rosters stay selectable rather than being ruled out.
@@ -329,6 +333,7 @@
     if (Array.isArray(cfg.rooms) && cfg.rooms.length) base.rooms = cfg.rooms;
     if (typeof cfg.titlebarAutoHide === "boolean") base.titlebarAutoHide = cfg.titlebarAutoHide;
     if (typeof cfg.autoSelectType === "boolean") base.autoSelectType = cfg.autoSelectType;
+    if (Array.isArray(cfg.nowNextExclude)) base.nowNextExclude = cfg.nowNextExclude;
     if (typeof cfg.selectedRooster === "string") base.selectedRooster = cfg.selectedRooster;
     if (cfg.rosterTypes && typeof cfg.rosterTypes === "object") base.rosterTypes = cfg.rosterTypes;
     if (base.classTypes.indexOf(base.selectedType) < 0) base.selectedType = base.classTypes[0];

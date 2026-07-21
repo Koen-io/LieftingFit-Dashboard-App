@@ -509,7 +509,16 @@ async function dayInfo(type, roosterNaam) {
     }
   }
 
-  var all = events.slice().sort(function (a, b) {
+  // Nu / Hierna is about COACHED classes. OpenGym is unmanned floor time and
+  // runs almost continuously downstairs, so leaving it in meant "Nu" was
+  // permanently OpenGym and "Hierna" was the next OpenGym slot — burying the
+  // classes a trainer actually cares about. Excluded here ONLY: the tiles, the
+  // type dropdown and every macro still see it.
+  var skip = {};
+  ((cfg && cfg.nowNextExclude) || []).forEach(function (t) { skip[normName(t)] = true; });
+  var forStrip = events.filter(function (e) { return !skip[normName(e.titel)]; });
+
+  var all = forStrip.slice().sort(function (a, b) {
     return (startMinutes(a) || 0) - (startMinutes(b) || 0);
   });
   var anyNow = nowAndNext(all);
