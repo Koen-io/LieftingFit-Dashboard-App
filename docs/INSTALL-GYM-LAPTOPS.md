@@ -1,5 +1,27 @@
 # Installatie op een gym-laptop
 
+## Snelste manier: de installer
+
+Dubbelklik **`tools/LieftingFit Installer.app`** (uit de uitgepakte zip). Die
+haalt de code op, stelt automatische updates in en plaatst de snelkoppeling —
+achter een nette voortgangsbalk. Daarna wijst hij je door de twee dingen die
+alleen een mens kan doen: de extensie laden en inloggen.
+
+- Eerste keer: rechtermuisknop → **Open** → **Open** (macOS-waarschuwing over een
+  niet-ondertekende app).
+- Vraagt macOS om ontwikkelaarstools? Klik **Installeer**, wacht, en start de
+  installer opnieuw. Dat is eenmalig per laptop en niet te omzeilen — het is de
+  prompt van Apple zelf.
+
+Waarom de extensie laden en inloggen niet automatisch gaan: Chrome staat het om
+veiligheidsredenen niet toe dat software zelf een extensie laadt of inlogt. Geen
+enkele installer kan daar omheen. De installer maakt beide zo kort mogelijk (pad
+staat al op het klembord, de juiste pagina's gaan vanzelf open).
+
+---
+
+## Of handmatig, stap voor stap
+
 Ongeveer 10 minuten per laptop. Doe stap 1 t/m 6 in volgorde.
 
 > **Belangrijk:** gebruik `git clone`, niet de zip. De automatische update haalt

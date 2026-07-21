@@ -1,0 +1,30 @@
+#!/bin/bash
+# LieftingFit Dashboard — installer bootstrap.
+#
+# Double-clicking the .app runs this. Its only jobs are to make sure the tools
+# the install needs exist, then hand off to the Python UI/logic in Resources.
+# Everything the user sees is the styled page that server.py opens.
+
+RES="$(cd "$(dirname "${BASH_SOURCE[0]}")/../Resources" && pwd)"
+
+note() {  # a native dialog for the two cases where there is no UI yet
+  osascript -e "display dialog \"$1\" buttons {\"OK\"} default button 1 with title \"LieftingFit installatie\" with icon note" >/dev/null 2>&1
+}
+
+# Command Line Tools give us both git and python3. On a fresh Mac neither exists
+# until this runs once. There is no way around the first prompt - it is Apple's,
+# and it needs a click - so trigger it, explain, and ask them to run the
+# installer again once it finishes.
+if ! /usr/bin/xcode-select -p >/dev/null 2>&1; then
+  /usr/bin/xcode-select --install >/dev/null 2>&1
+  note "macOS moet eenmalig ontwikkelaarstools installeren (voor git). Klik in het venster dat verschijnt op Installeer, wacht tot dat klaar is, en start deze installer daarna opnieuw."
+  exit 0
+fi
+
+PY="$(command -v python3 || echo /usr/bin/python3)"
+if ! "$PY" --version >/dev/null 2>&1; then
+  note "Python 3 kon niet worden gestart. Zorg dat de ontwikkelaarstools volledig zijn geïnstalleerd en probeer opnieuw."
+  exit 1
+fi
+
+exec "$PY" "$RES/server.py" "$RES"

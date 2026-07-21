@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LieftingFit Dashboard installeren</title>
+<style>
+  :root{
+    --bg:#0b0d10; --bg2:#0f1216; --panel:#15181e; --panel2:#1b1f27;
+    --border:rgba(255,255,255,.09); --border2:rgba(255,255,255,.16);
+    --text:#f3f5f8; --muted:#97a1b0; --muted2:#6b7280;
+    --accent:#e2673c; --green:#22c55e; --red:#ff6b6b;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family:var(--font); color:var(--text);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(226,103,60,.10), transparent 60%),
+      radial-gradient(1000px 500px at -10% 110%, rgba(168,85,247,.07), transparent 55%),
+      var(--bg);
+    display:flex; align-items:center; justify-content:center; padding:32px;
+    -webkit-font-smoothing:antialiased; user-select:none;
+  }
+  .card{
+    width:min(560px,100%);
+    background:linear-gradient(160deg,var(--panel),var(--bg2));
+    border:1px solid var(--border); border-radius:22px;
+    padding:40px 40px 34px; box-shadow:0 40px 90px -40px #000;
+  }
+  .brand{display:flex; align-items:center; gap:16px; margin-bottom:26px}
+  .brand img{height:52px;width:auto;display:block}
+  .brand .t1{font-weight:800;font-size:22px;letter-spacing:.02em;line-height:1}
+  .brand .t2{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.22em;margin-top:6px}
+  h1{font-size:24px;margin:0 0 8px}
+  p.lead{color:var(--muted);font-size:15px;line-height:1.55;margin:0 0 26px}
+
+  .bar{height:8px;border-radius:99px;background:var(--panel2);overflow:hidden;margin:4px 0 22px}
+  .bar>i{display:block;height:100%;width:0;border-radius:99px;
+    background:linear-gradient(90deg,var(--accent),#f0895f);transition:width .5s ease}
+
+  .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+  .steps li{display:flex;align-items:center;gap:13px;font-size:15px;color:var(--muted)}
+  .steps li.done{color:var(--text)}
+  .steps li.active{color:var(--text)}
+  .dot{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+    border:2px solid var(--border2);background:transparent;font-size:13px;font-weight:800}
+  li.done .dot{border-color:var(--green);background:var(--green);color:#05210f}
+  li.error .dot{border-color:var(--red);background:var(--red);color:#2a0606}
+  li.active .dot{border-color:var(--accent);border-top-color:transparent;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .btn{appearance:none;border:1px solid var(--border2);background:var(--panel2);color:var(--text);
+    font:700 15px/1 var(--font);padding:14px 22px;border-radius:12px;cursor:pointer}
+  .btn:hover{background:#232a32;border-color:#3a424b}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn-primary:hover{background:#ef7549}
+  .row{display:flex;gap:12px;margin-top:26px;flex-wrap:wrap}
+  .row .btn{flex:1;min-width:160px;text-align:center}
+
+  .manual{display:flex;flex-direction:column;gap:14px}
+  .mstep{border:1px solid var(--border);border-radius:14px;padding:16px 18px;background:var(--panel2)}
+  .mstep h3{margin:0 0 6px;font-size:16px;display:flex;align-items:center;gap:9px}
+  .mnum{flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;
+    display:grid;place-items:center;font-size:13px;font-weight:800}
+  .mstep p{margin:0 0 12px;color:var(--muted);font-size:13.5px;line-height:1.5}
+  .mstep kbd{background:#0c0f13;border:1px solid var(--border2);border-radius:6px;padding:1px 6px;font-size:12px}
+  .hint{color:var(--muted2);font-size:12.5px;margin-top:18px;line-height:1.5}
+  .center{text-align:center}
+  .big-check{width:76px;height:76px;border-radius:50%;background:var(--green);color:#05210f;
+    display:grid;place-items:center;font-size:40px;margin:6px auto 20px;font-weight:900}
+  .err{color:var(--red);font-size:14px;margin-top:10px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <img src="/logo.png" alt="LieftingFit">
+      <div><div class="t1">LieftingFit</div><div class="t2">Dashboard installatie</div></div>
+    </div>
+
+    <!-- WELCOME -->
+    <section id="welcome">
+      <h1>Klaar om te installeren</h1>
+      <p class="lead">Deze installer zet het trainersdashboard op deze laptop, stelt
+        automatische updates in en plaatst een snelkoppeling op het bureaublad.
+        Daarna zijn er nog twee korte stappen die je zelf doet — die legt de
+        installer je stap voor stap uit.</p>
+      <div class="row">
+        <button class="btn btn-primary" onclick="start()">Installeren</button>
+      </div>
+      <div class="hint">Bij de eerste keer vraagt macOS mogelijk om ontwikkelaarstools
+        te installeren. Klik dan op Installeer en start deze installer opnieuw.</div>
+    </section>
+
+    <!-- INSTALLING -->
+    <section id="installing" class="hidden">
+      <h1>Bezig met installeren…</h1>
+      <div class="bar"><i id="fill"></i></div>
+      <ul class="steps" id="steplist"></ul>
+      <div class="err hidden" id="errline"></div>
+    </section>
+
+    <!-- MANUAL -->
+    <section id="manual" class="hidden">
+      <h1>Nog twee stappen</h1>
+      <p class="lead">Deze twee kan alleen jij doen — Chrome staat om
+        veiligheidsredenen niet toe dat een installer een extensie laadt of
+        inlogt. De installer maakt het zo makkelijk mogelijk.</p>
+      <div class="manual">
+        <div class="mstep">
+          <h3><span class="mnum">1</span> Laad de extensie</h3>
+          <p>Klik hieronder. Chrome opent bij de extensies en het pad is al
+            gekopieerd. Zet <b>Ontwikkelaarsmodus</b> aan → <b>Uitgepakte extensie
+            laden</b> → druk <kbd>⌘⇧G</kbd>, <kbd>⌘V</kbd>, <kbd>Enter</kbd>.</p>
+          <button class="btn" onclick="api('/api/open-extensions')">Open Chrome-extensies</button>
+        </div>
+        <div class="mstep">
+          <h3><span class="mnum">2</span> Log in bij Sportbit</h3>
+          <p>Klik hieronder, log in met het trainersaccount en vink
+            <b>Inlog onthouden</b> aan. Sla je gegevens daarna op via
+            Instellingen → Geavanceerde instellingen → Automatisch inloggen.</p>
+          <button class="btn" onclick="api('/api/open-login')">Open inlogpagina</button>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn btn-primary" onclick="finish()">Ik ben klaar</button>
+      </div>
+    </section>
+
+    <!-- DONE -->
+    <section id="done" class="hidden center">
+      <div class="big-check">✓</div>
+      <h1>Alles klaar!</h1>
+      <p class="lead">Het dashboard staat op deze laptop en werkt zichzelf voortaan
+        vanzelf bij. Open het met de <b>LieftingFit Dashboard</b>-snelkoppeling op
+        het bureaublad. Cast per zaal één keer naar de TV — Chrome onthoudt dat.</p>
+      <div class="row">
+        <button class="btn btn-primary" onclick="api('/api/quit')">Sluiten</button>
+      </div>
+    </section>
+
+    <!-- ERROR -->
+    <section id="error" class="hidden">
+      <h1>Er ging iets mis</h1>
+      <p class="lead" id="errmsg"></p>
+      <div class="row">
+        <button class="btn" onclick="location.reload()">Opnieuw proberen</button>
+        <button class="btn" onclick="api('/api/quit')">Sluiten</button>
+      </div>
+    </section>
+  </div>
+
+<script>
+  function show(id){
+    ["welcome","installing","manual","done","error"].forEach(function(s){
+      document.getElementById(s).classList.toggle("hidden", s!==id);
+    });
+  }
+  function api(path){ return fetch(path).then(function(r){return r.json()}).catch(function(){}); }
+  function start(){ api("/api/run"); show("installing"); }
+  function finish(){ api("/api/done"); show("done"); }
+
+  var ICON={done:"✓",error:"!",active:"",pending:""};
+  function render(st){
+    if(st.phase==="installing"||st.phase==="manual"||st.phase==="done"||st.phase==="error"){
+      var list=document.getElementById("steplist"); list.innerHTML="";
+      var total=st.steps.length, doneN=0;
+      st.steps.forEach(function(s){
+        if(s.state==="done") doneN++;
+        var li=document.createElement("li"); li.className=s.state;
+        var dot='<span class="dot">'+(ICON[s.state]||"")+'</span>';
+        li.innerHTML=dot+"<span>"+s.label+"</span>";
+        list.appendChild(li);
+      });
+      document.getElementById("fill").style.width=Math.round(doneN/total*100)+"%";
+    }
+    if(st.phase==="error"){
+      document.getElementById("errmsg").textContent=st.error||"Onbekende fout.";
+      show("error"); return;
+    }
+    // Do not yank the user off a screen they are acting on.
+    var cur=["welcome","installing","manual","done"].filter(function(s){
+      return !document.getElementById(s).classList.contains("hidden"); })[0];
+    if(st.phase==="installing" && cur==="welcome") show("installing");
+    if(st.phase==="manual" && (cur==="installing")) show("manual");
+  }
+
+  (function poll(){
+    fetch("/api/status").then(function(r){return r.json()}).then(render).catch(function(){})
+      .finally(function(){ setTimeout(poll, 500); });
+  })();
+</script>
+</body>
+</html>
