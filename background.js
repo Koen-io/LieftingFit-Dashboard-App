@@ -73,14 +73,14 @@ if (IS_EXTENSION) {
       // it here covers every route in: desktop app, toolbar icon, zaal button,
       // and the reload after a self-update.
       //
-      // "maximized", never "fullscreen": the trainer needs the tab strip and
-      // the cast menu, which fullscreen hides.
+      // state "fullscreen" is the WINDOW fullscreen — macOS's green button. It
+      // hides the Mac menubar while Chrome keeps its tab strip and toolbar, so
+      // casting stays reachable. Not to be confused with the page-level
+      // Fullscreen API, which would hide the tabs.
       if (sender && sender.tab && sender.tab.windowId != null) {
         chrome.windows.get(sender.tab.windowId).then(function (w) {
-          // Leave a deliberately shrunk window alone only if it is already
-          // maximized; otherwise always size it up.
-          if (w.state !== "maximized" && w.state !== "fullscreen") {
-            return chrome.windows.update(sender.tab.windowId, { state: "maximized" });
+          if (w.state !== "fullscreen") {
+            return chrome.windows.update(sender.tab.windowId, { state: "fullscreen" });
           }
         }).catch(function () {}).then(function () { sendResponse({ ok: true }); });
         return true;
@@ -232,7 +232,7 @@ async function openRoom(zaal) {
   // Maximise the window a zaal opens in. The trainer needs the Chrome tab strip
   // and the cast menu, so this is a maximised WINDOW — not fullscreen, which
   // would hide exactly the controls they came for.
-  try { await chrome.windows.update(tab.windowId, { state: "maximized" }); } catch (e) {}
+  try { await chrome.windows.update(tab.windowId, { state: "fullscreen" }); } catch (e) {}
   rooms[zaal] = tab.id;
   await setRooms(rooms);
   return { ok: true, tabId: tab.id, reused: false };
