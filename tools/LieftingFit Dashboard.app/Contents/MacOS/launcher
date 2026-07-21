@@ -1,4 +1,9 @@
 #!/bin/bash
 # Opens Chrome directly on the LieftingFit dashboard.
 # Runs inside an .app bundle, so no Terminal window ever appears.
-open -na "Google Chrome" --args --start-fullscreen --new-window "chrome-extension://odppaoogblejdfldnlfacbeiomckheej/index.html"
+#
+# Deliberately NO --start-fullscreen here: that flag gives Chrome's tab-less
+# presentation fullscreen, which hides the tab strip and the cast menu. The
+# extension puts the window into macOS fullscreen (green button) on load
+# instead, which hides the Mac menubar while keeping Chrome's own chrome.
+open -na "Google Chrome" --args --new-window "chrome-extension://odppaoogblejdfldnlfacbeiomckheej/index.html"
