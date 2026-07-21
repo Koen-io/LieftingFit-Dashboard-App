@@ -524,8 +524,18 @@ body::before {
   white-space: nowrap;
 }
 .icon-btn-wide svg { width: 19px; height: 19px; }
-/* On narrow screens the icon alone is enough — the row must not wrap. */
-@media (max-width: 820px) {
-  .icon-btn-wide { width: 46px; padding: 0; }
-  .icon-btn-wide span { display: none; }
-}
+.icon-btn-wide span { line-height: 1; }
+
+/* The top row must stay on ONE line. It was allowed to wrap, so once the
+   feedback label was added the button dropped underneath the cast button.
+   Nothing here wraps now; the brand text and the clock give up space instead,
+   since the label has to stay fully readable. */
+.topbar { flex-wrap: nowrap; gap: clamp(10px, 1.4vw, 20px); }
+.topbar-actions { flex: none; margin-left: 0; }
+.icon-btn-wide { flex: none; }
+.brand { min-width: 0; flex: 0 1 auto; }
+.brand-text { min-width: 0; }
+.brand-name, .brand-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Clock sits just left of the buttons rather than being pushed to the far
+   right, which is what left the label nowhere to go. */
+.clock { margin-left: auto; margin-right: clamp(6px, 1vw, 16px); flex: none; }
