@@ -23,6 +23,12 @@
  * pinned ids. If auto-login misbehaves, that is the first thing to check.
  */
 (function () {
+  // The background re-injects into already-open tabs after an extension
+  // reload; a tab that ALSO gets the declarative injection would
+  // otherwise run this twice.
+  if (window.__lfLoginLoaded) return;
+  window.__lfLoginLoaded = true;
+
   var ATTEMPT_FLAG = "lf-login-attempted";   // per page load, survives SPA routing
   var CREDS_KEY = "credentials";
   var attempted = false;

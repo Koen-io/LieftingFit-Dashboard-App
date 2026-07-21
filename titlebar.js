@@ -8,6 +8,12 @@
  * and can auto-hide.
  */
 (function () {
+  // The background re-injects into already-open tabs after an extension
+  // reload; a tab that ALSO gets the declarative injection would
+  // otherwise run this twice.
+  if (window.__lfTitlebarLoaded) return;
+  window.__lfTitlebarLoaded = true;
+
   var BAR_ID = "lf-titlebar";
   var ROOM_ICONS = { A: "🅰", B: "🅱", C: "🅲" };
 

@@ -121,6 +121,31 @@ if (IS_EXTENSION) {
   })();
 }
 
+/* Re-inject into tabs that were already open.
+ *
+ * Declared content scripts only run when a page LOADS. After the extension
+ * reloads — which it now does to apply its own updates — every Sportbit tab
+ * that was already open is left with dead scripts: no titlebar, and no
+ * auto-login on a login page sitting right there. Sweeping the open tabs once
+ * at startup restores both without waiting for a refresh.
+ *
+ * Both scripts guard against running twice, so a tab that also gets the normal
+ * declarative injection is unaffected.
+ */
+if (IS_EXTENSION) {
+  (async function reinjectOpenTabs() {
+    try {
+      var tabs = await chrome.tabs.query({ url: "https://*.sportbitapp.nl/*" });
+      for (var i = 0; i < tabs.length; i++) {
+        try {
+          await chrome.scripting.insertCSS({ target: { tabId: tabs[i].id }, files: ["titlebar.css"] });
+          await chrome.scripting.executeScript({ target: { tabId: tabs[i].id }, files: ["titlebar.js", "login.js"] });
+        } catch (e) { /* tab may be mid-navigation or restricted */ }
+      }
+    } catch (e) {}
+  })();
+}
+
 /* Keep the Sportbit session alive.
  *
  * The dashboard sits idle on a gym laptop for hours, so the session quietly
