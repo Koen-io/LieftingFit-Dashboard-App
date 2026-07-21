@@ -27,15 +27,26 @@ done
 sleep 0.6   # let the window finish opening before changing its attribute
 
 osascript <<'APPLESCRIPT' 2>/dev/null
+-- Chrome must be frontmost or System Events reports zero windows ("invalid
+-- index"), so activate and give it a moment before touching anything.
 tell application "Google Chrome" to activate
-delay 0.3
+delay 0.8
+
 tell application "System Events"
   tell process "Google Chrome"
-    try
-      if value of attribute "AXFullScreen" of front window is false then
-        set value of attribute "AXFullScreen" of front window to true
-      end if
-    end try
+    -- Target the DASHBOARD window by title, not "front window": with several
+    -- Chrome windows open, front window is often something else entirely and
+    -- would be sent fullscreen instead.
+    repeat with w in windows
+      try
+        if name of w contains "Trainer Dashboard" then
+          if value of attribute "AXFullScreen" of w is false then
+            set value of attribute "AXFullScreen" of w to true
+          end if
+          exit repeat
+        end if
+      end try
+    end repeat
   end tell
 end tell
 APPLESCRIPT
