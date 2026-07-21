@@ -682,7 +682,12 @@
       var key = node.getAttribute("data-bind");
       if (config[key]) node.textContent = config[key];
     });
-    document.title = config.gymName + " · Trainer Dashboard";
+    // Lead with the zaal so the browser tab strip is readable at a glance —
+    // three identical "LieftingFit · Trainer Dashboard" tabs are useless when
+    // each one drives a different TV.
+    document.title = ZAAL
+      ? "Zaal " + ZAAL + " · " + config.gymName
+      : config.gymName + " · Trainer Dashboard";
   }
 
   function renderTiles() {
@@ -692,7 +697,12 @@
       var accent = ACCENTS.indexOf(s.accent) >= 0 ? s.accent : "blue";
       var hasMacro = !!(s.macro && Array.isArray(s.macro.steps) && s.macro.steps.length);
       var fallbackUrl = hasMacro ? (s.macro.startUrl || s.url) : s.url;
-      var hasRosterPickerEarly = Array.isArray(s.rosterOptions) && s.rosterOptions.length;
+      // ANY tile carrying a dropdown must not be an <a>: clicking a <select>
+      // inside a link activates the link, so the dropdown never opens. The
+      // Leden-toevoegen tile was missed here first time round, which is why its
+      // picker jumped straight to Dexos.
+      var hasRosterPickerEarly = (Array.isArray(s.rosterOptions) && s.rosterOptions.length) ||
+                                 (s.classPicker && IS_EXT);
       var attrs = { "class": "tile acc-" + accent };
       // A tile with its own picker must NOT be an <a>. A <select> inside an
       // anchor cannot be used: the browser activates the link on click, so the
@@ -1097,6 +1107,68 @@
     var body = $("#settingsBody");
     body.innerHTML = "";
 
+    /* Two audiences, one screen.
+     *
+     * A trainer needs three things: the two toggles and the update button.
+     * Everything else — names, zalen, class-type lists, shortcut internals,
+     * stored credentials — can break the dashboard if changed carelessly, and
+     * is only ever touched by Koen. So the default view is deliberately small,
+     * and the rest sits behind one confirmed door. */
+
+    // ---------- Always visible ----------
+    var basic = el("div", { "class": "set-section" }, "<h3>Weergave</h3>");
+
+    var ahWrap = el("label", { "class": "set-check" });
+    var ah = el("input", { type: "checkbox" });
+    ah.checked = !!config.titlebarAutoHide;
+    ah.addEventListener("change", function () { config.titlebarAutoHide = ah.checked; });
+    ahWrap.appendChild(ah);
+    ahWrap.appendChild(el("span", null,
+      "Menubalk automatisch verbergen (schuift weg; kom met de muis naar de bovenrand). " +
+      "De balk staat óók op de TV, dus dit houdt het Coachboard vrij."));
+    basic.appendChild(ahWrap);
+
+    var asWrap = el("label", { "class": "set-check" });
+    var as = el("input", { type: "checkbox" });
+    as.checked = !!config.autoSelectType;
+    as.addEventListener("change", function () { config.autoSelectType = as.checked; });
+    asWrap.appendChild(as);
+    asWrap.appendChild(el("span", null,
+      "Lestype automatisch kiezen bij openen — zet het actieve lestype op de les die " +
+      "nu draait of zo begint. Handig als je vlak voor je les binnenkomt."));
+    basic.appendChild(asWrap);
+    body.appendChild(basic);
+
+    // Updates — the one maintenance action a trainer may legitimately need.
+    var up = el("div", { "class": "set-section" }, "<h3>Onderhoud</h3>");
+    up.appendChild(el("div", { "class": "help-text" },
+      "Versie " + escapeHtml(IS_EXT ? chrome.runtime.getManifest().version : "—")));
+    var upRow = el("div", { "class": "set-row-btns" });
+    var btnUpd = el("button", { "class": "btn btn-ghost", "type": "button" }, "Controleer op updates");
+    btnUpd.addEventListener("click", function () { checkForUpdates(true); });
+    upRow.appendChild(btnUpd);
+    up.appendChild(upRow);
+    body.appendChild(up);
+
+    // ---------- Behind the door ----------
+    if (!expertUnlocked) {
+      var gate = el("div", { "class": "set-section" });
+      gate.appendChild(el("p", { "class": "help-text" },
+        "Alle overige instellingen (zalen, lestypes, knoppen, inloggegevens) staan " +
+        "onder geavanceerde instellingen. Die hoef je normaal niet aan te raken."));
+      var openExpert = el("button", { "class": "btn btn-ghost", "type": "button" },
+        "Geavanceerde instellingen");
+      openExpert.addEventListener("click", function () { show("#expertModal"); });
+      gate.appendChild(openExpert);
+      body.appendChild(gate);
+      return;                        // nothing below is built for trainers
+    }
+
+    body.appendChild(el("div", { "class": "set-section" },
+      '<p class="help-text help-warn">⚠️ Geavanceerde instellingen actief. ' +
+      "Wijzigingen hieronder kunnen het dashboard onbruikbaar maken. " +
+      "Er is automatisch een back-up bewaard.</p>"));
+
     // General
     var gen = el("div", { "class": "set-section" }, "<h3>Algemeen</h3>");
     gen.appendChild(fieldInput("Naam sportschool", "gymName", config.gymName));
@@ -1115,53 +1187,30 @@
       config.rooms = rta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
     });
     rm.appendChild(rta);
-
-    var ahWrap = el("label", { "class": "set-check" });
-    var ah = el("input", { type: "checkbox" });
-    ah.checked = !!config.titlebarAutoHide;
-    ah.addEventListener("change", function () { config.titlebarAutoHide = ah.checked; });
-    ahWrap.appendChild(ah);
-    ahWrap.appendChild(el("span", null,
-      "Menubalk automatisch verbergen (schuift weg; kom met de muis naar de bovenrand). " +
-      "De balk staat óók op de TV, dus dit houdt het Coachboard vrij."));
-    rm.appendChild(ahWrap);
-
-    var asWrap = el("label", { "class": "set-check" });
-    var as = el("input", { type: "checkbox" });
-    as.checked = !!config.autoSelectType;
-    as.addEventListener("change", function () { config.autoSelectType = as.checked; });
-    asWrap.appendChild(as);
-    asWrap.appendChild(el("span", null,
-      "Lestype automatisch kiezen bij openen — zet het actieve lestype op de les die " +
-      "nu draait of zo begint. Handig als je vlak voor je les binnenkomt."));
-    rm.appendChild(asWrap);
     body.appendChild(rm);
 
-    // Shortcuts — hidden behind a deliberate confirmation. Editing these can
-    // stop the dashboard working, and most trainers never need them.
+    // Shortcuts
     var sc = el("div", { "class": "set-section" }, "<h3>Snelkoppelingen</h3>");
-    if (!expertUnlocked) {
-      sc.appendChild(el("p", { "class": "help-text" },
-        "De knoppen zijn al ingesteld en werken. Aanpassen is alleen nodig als er " +
-        "iets aan Sportbit zelf verandert."));
-      var openExpert = el("button", { "class": "btn btn-ghost", "type": "button" },
-        "Snelkoppelingen aanpassen (expertmodus)");
-      openExpert.addEventListener("click", function () { show("#expertModal"); });
-      sc.appendChild(openExpert);
-    } else {
-      sc.appendChild(el("p", { "class": "help-text help-warn" },
-        "⚠️ Expertmodus actief. Wijzigingen hier kunnen het dashboard onbruikbaar maken."));
-      var scList = el("div", { id: "scList" });
-      config.shortcuts.forEach(function (s, i) { scList.appendChild(shortcutCard(s, i)); });
-      sc.appendChild(scList);
-      var addSc = el("button", { "class": "add-row", "type": "button" }, "+ Snelkoppeling toevoegen");
-      addSc.addEventListener("click", function () {
-        config.shortcuts.push({ id: "custom" + Date.now(), label: "Nieuwe knop", sub: "", icon: "link", accent: ACCENTS[config.shortcuts.length % ACCENTS.length], cast: false, url: "" });
-        buildSettingsForm();
-      });
-      sc.appendChild(addSc);
-    }
+    var scList = el("div", { id: "scList" });
+    config.shortcuts.forEach(function (s, i) { scList.appendChild(shortcutCard(s, i)); });
+    sc.appendChild(scList);
+    var addSc = el("button", { "class": "add-row", "type": "button" }, "+ Snelkoppeling toevoegen");
+    addSc.addEventListener("click", function () {
+      config.shortcuts.push({ id: "custom" + Date.now(), label: "Nieuwe knop", sub: "", icon: "link", accent: ACCENTS[config.shortcuts.length % ACCENTS.length], cast: false, url: "" });
+      buildSettingsForm();
+    });
+    sc.appendChild(addSc);
     body.appendChild(sc);
+
+    // Back-up restore lives with the advanced settings — it only makes sense
+    // next to the things that can break.
+    var bk = el("div", { "class": "set-section" }, "<h3>Back-up</h3>");
+    var bkRow = el("div", { "class": "set-row-btns" });
+    var btnRestore = el("button", { "class": "btn btn-ghost", "type": "button" }, "Herstel back-up");
+    btnRestore.addEventListener("click", restoreBackup);
+    bkRow.appendChild(btnRestore);
+    bk.appendChild(bkRow);
+    body.appendChild(bk);
 
     // Which classes belong to which zaal — the list that narrows step 2.
     var rt = el("div", { "class": "set-section" }, "<h3>Lestypes per zaal</h3>");
@@ -1189,21 +1238,6 @@
     loadZaal();
     rt.appendChild(zaalTa);
     body.appendChild(rt);
-
-    // Updates + back-ups
-    var up = el("div", { "class": "set-section" }, "<h3>Onderhoud</h3>");
-    var verLine = el("div", { "class": "help-text" },
-      "Versie " + escapeHtml(IS_EXT ? chrome.runtime.getManifest().version : "—"));
-    up.appendChild(verLine);
-    var upRow = el("div", { "class": "set-row-btns" });
-    var btnUpd = el("button", { "class": "btn btn-ghost", "type": "button" }, "Controleer op updates");
-    btnUpd.addEventListener("click", function () { checkForUpdates(true); });
-    upRow.appendChild(btnUpd);
-    var btnRestore = el("button", { "class": "btn btn-ghost", "type": "button" }, "Herstel back-up");
-    btnRestore.addEventListener("click", restoreBackup);
-    upRow.appendChild(btnRestore);
-    up.appendChild(upRow);
-    body.appendChild(up);
 
     // Auto-login. Deliberately NOT part of `config`: it is stored under its own
     // chrome.storage.local key so "Exporteer config" can never write the

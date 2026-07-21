@@ -237,6 +237,20 @@
     });
   }
 
+  /* Keep the zaal in the browser tab title.
+   *
+   * Three cast tabs otherwise read "Coachboard", "Rooster", "DEX - Onderhoud
+   * systeem" — nothing tells the trainer which TV they are driving. Sportbit is
+   * an SPA and rewrites document.title on every route change, so this is
+   * re-applied rather than set once. */
+  function stampTitle() {
+    if (!zaal) return;
+    var prefix = "Zaal " + zaal + " · ";
+    if (document.title.indexOf(prefix) === 0) return;      // already ours
+    var base = document.title.replace(/^Zaal [^·]*· /, "");
+    document.title = prefix + base;
+  }
+
   function barHeight() { return autoHide ? 6 : 52; }
 
   // Push the page's own fixed headers down out from under the bar.
@@ -296,6 +310,7 @@
     syncFullscreen();
     syncBusy();          // a macro may still be mid-flight on this tab
     refreshNextClass();
+    stampTitle();
   }
 
   // Sportbit is Angular and Dexos is jQuery; both re-render large parts of the
@@ -316,6 +331,7 @@
     setInterval(function () {
       if (!document.getElementById(BAR_ID)) attach();
       nudgeFixedTops();
+      stampTitle();
     }, 2000);
 
     ["fullscreenchange", "webkitfullscreenchange"].forEach(function (evt) {

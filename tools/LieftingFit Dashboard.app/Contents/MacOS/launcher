@@ -1,0 +1,4 @@
+#!/bin/bash
+# Opens Chrome directly on the LieftingFit dashboard.
+# Runs inside an .app bundle, so no Terminal window ever appears.
+open -na "Google Chrome" --args --new-window "chrome-extension://odppaoogblejdfldnlfacbeiomckheej/index.html"
